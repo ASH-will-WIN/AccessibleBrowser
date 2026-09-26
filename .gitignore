@@ -1,0 +1,13 @@
+node_modules/
+dist/
+out/
+build/
+.env
+.env.*
+!.env.example
+graphify-out/
+.DS_Store
+*.log
+coverage/
+__pycache__/
+.jac/

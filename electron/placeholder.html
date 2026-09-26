@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AccessibleBrowser Foundation</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #10131a; color: #f4f7fb; }
+      main { max-width: 680px; padding: 48px; border: 1px solid #384253; border-radius: 20px; background: #1b2230; }
+      code { color: #a7d8ff; }
+      #status { margin-top: 24px; padding: 12px; border-radius: 10px; background: #273247; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AccessibleBrowser foundation</h1>
+      <p>The Electron shell is running. Phase 1 will connect the Jac product layer and live Chromium page.</p>
+      <div id="status">Checking the Electron bridge…</div>
+    </main>
+    <script>
+      window.accessibleBrowser.ping().then((result) => {
+        document.querySelector("#status").textContent =
+          "Bridge online: " + result.source + ", contract v" + result.contractVersion;
+      }).catch((error) => {
+        document.querySelector("#status").textContent = "Bridge error: " + error.message;
+      });
+    </script>
+  </body>
+</html>

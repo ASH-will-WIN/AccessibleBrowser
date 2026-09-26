@@ -1,0 +1,22 @@
+{
+  "name": "accessible-browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jac-heavy, Electron-based accessibility-first Chromium browser",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "start": "node scripts/dev.js",
+    "electron": "electron .",
+    "jac:dev": "jac run",
+    "jac:check": "jac check",
+    "format:jac": "jac fmt main.jac frontend.jac jac/main.jac",
+    "graphify": "graphify . --directed"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true
+  }
+}
