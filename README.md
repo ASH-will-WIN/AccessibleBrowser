@@ -16,6 +16,7 @@ Read these before contributing:
 - ARCHITECTURE.md — component responsibilities and data flow
 - CONTRACTS.md — Jac/Electron message shapes
 - DECISIONS.md — locked decisions and deferred choices
+- PHASE_1_WORKSTREAM_PROMPTS.md — copy-paste briefs for the three parallel build sessions
 
 ## Local setup
 
