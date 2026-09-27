@@ -1,8 +1,8 @@
 """Jac-owned accessibility experience for the first Phase 1 flow.
 
-The development adapter below deliberately returns the same JSON-compatible
-shapes described in CONTRACTS.md as the future Jac planner and Electron bridge.
-It never returns executable DOM code or arbitrary CSS.
+The UI talks to the Jac planner and Electron page host only through the typed
+preload bridge. The old deterministic adapter remains below for visible state
+demos and offline controls, but natural-language requests use the live path.
 """
 
 obj PreferenceRule {
@@ -201,6 +201,13 @@ def:pub app -> JsxElement {
         request_state_detail: str = "Ready for a request.",
         plan_ready: bool = False,
         reviewed_plan: AdaptationPlan = AdaptationPlan(),
+        reviewed_wire_plan: dict[str, any] = {},
+        current_page: dict[str, any] = {},
+        page_title: str = "Loading current page…",
+        page_url: str = "",
+        page_tab_id: str = "",
+        page_revision: int = 0,
+        page_origin: str = "",
         plan_summary: str = "",
         plan_confidence: str = "",
         plan_warning: str = "",
@@ -220,19 +227,35 @@ def:pub app -> JsxElement {
         voice_command: str = "",
         voice_message: str = "Voice mode is off.",
         voice_command_shape: str = "No command sent yet.",
-        bridge_status: str = "Bridge status: development adapter active",
+        bridge_status: str = "Connecting Jac planner and Electron page host…",
         submit_timer: float = 0.0;
 
-    can with entry {
-        saved_rule = localStorage.getItem("accessible-browser-dev-rule");
-        if saved_rule {
-            saved_parts = saved_rule.split("|");
-            loaded_scope = saved_parts[0];
-            if loaded_scope.startswith("page:") { loaded_scope = "page"; }
-            if loaded_scope.startswith("website:") { loaded_scope = "website"; }
-            if loaded_scope.startswith("global:") { loaded_scope = "global"; }
-            saved_scope = loaded_scope;
-            preference_message = "An approved " + loaded_scope + " rule is being considered for this page.";
+    bridge: any = window as any;
+
+    async can with entry {
+        try {
+            snapshot: any = await bridge.browser.getActivePageSnapshot();
+            if snapshot and snapshot.status == "rejected" {
+                bridge_status = "Bridge rejected the page snapshot: " + snapshot.error.message;
+                request_state = "failed";
+                request_state_detail = "The live page snapshot was rejected. No page change was attempted.";
+            } elif snapshot {
+                current_page = snapshot;
+                page_title = snapshot.title if snapshot.title else snapshot.url;
+                page_url = snapshot.url;
+                page_tab_id = snapshot.tabId;
+                page_revision = snapshot.pageRevision;
+                page_origin = snapshot.origin;
+                bridge_status = "Bridge connected · Jac planner · live Chromium page";
+                rules: any = await bridge.accessibleBrowser.jac.getApplicablePreferences(snapshot.origin, snapshot.url);
+                if rules and len(rules) > 0 {
+                    saved_scope = rules[0].scope;
+                    preference_message = "An approved " + rules[0].scope + " rule is being considered for this page.";
+                }
+            }
+        } except Exception as error {
+            bridge_status = "Bridge unavailable: " + str(error);
+            request_state_detail = "The Jac planner is unavailable. Deterministic controls remain available.";
         }
     }
 
@@ -285,6 +308,100 @@ def:pub app -> JsxElement {
         show_preference_prompt = True;
     }
 
+    async def submit_live_request() {
+        try {
+            snapshot: any = await bridge.browser.getActivePageSnapshot();
+            if not snapshot or snapshot.status == "rejected" {
+                request_state = "failed";
+                error_code = snapshot.error.code if snapshot and snapshot.error else "PAGE_SNAPSHOT_UNAVAILABLE";
+                request_state_detail = "The live page snapshot was unavailable. No page change was attempted.";
+                return;
+            }
+            current_page = snapshot;
+            page_title = snapshot.title if snapshot.title else snapshot.url;
+            page_url = snapshot.url;
+            page_tab_id = snapshot.tabId;
+            page_revision = snapshot.pageRevision;
+            page_origin = snapshot.origin;
+            active_profile: any = await bridge.accessibleBrowser.jac.getActiveProfile();
+            request_payload = {
+                "requestId": "ui-request-" + str(Date.now()),
+                "userRequest": request_text,
+                "tabId": snapshot.tabId,
+                "pageRevision": snapshot.pageRevision,
+                "profile": active_profile,
+                "page": snapshot,
+                "mode": "deterministic"
+            };
+            adaptation_request: any = await bridge.accessibleBrowser.jac.createAdaptationRequest(request_payload);
+            plan_result: any = await bridge.accessibleBrowser.jac.createAdaptationPlan(adaptation_request);
+            if not plan_result or not plan_result.ok {
+                plan_error: any = plan_result.error if plan_result and plan_result.error else {"code": "PLAN_UNAVAILABLE", "message": "Jac could not create a plan."};
+                error_code = plan_error.code as str;
+                rejection_message = plan_error.message as str;
+                request_state = "rejected" if plan_error.code == "INVALID_PLAN" else ("llm unavailable" if plan_error.code == "LLM_UNAVAILABLE" else ("stale" if plan_error.code == "STALE_PAGE_REVISION" else "failed"));
+                request_state_detail = plan_error.message as str;
+                return;
+            }
+            wire_plan = plan_result.plan;
+            if wire_plan.status != "ready" or len(wire_plan.actions) == 0 {
+                error_code = "NO_OP";
+                rejection_message = "Jac found no safe, allowlisted change for this request.";
+                request_state = "rejected";
+                request_state_detail = "Nothing changed on the page. Try describing a supported accessibility need.";
+                return;
+            }
+            clean_actions: list[dict[str, any]] = [{
+                "actionId": action.actionId,
+                "type": action.type,
+                "parameters": action.parameters,
+                "reason": action.reason,
+                "reversible": action.reversible,
+                "targetElementIds": action.targetElementIds if action.targetElementIds else []
+            } for action in wire_plan.actions];
+            reviewed_wire_plan = {
+                "schemaVersion": wire_plan.schemaVersion,
+                "planId": wire_plan.planId,
+                "requestId": wire_plan.requestId,
+                "tabId": wire_plan.tabId,
+                "pageRevision": wire_plan.pageRevision,
+                "summary": wire_plan.summary,
+                "actions": clean_actions,
+                "confidence": wire_plan.confidence,
+                "warnings": wire_plan.warnings,
+                "suggestedScope": wire_plan.suggestedScope,
+                "status": wire_plan.status
+            };
+            reviewed_plan = AdaptationPlan(
+                schemaVersion=wire_plan.schemaVersion,
+                planId=wire_plan.planId,
+                requestId=wire_plan.requestId,
+                tabId=wire_plan.tabId,
+                pageRevision=wire_plan.pageRevision,
+                summary=wire_plan.summary,
+                actions=[PlanAction(actionId=action.actionId, kind=action.type, label=action.type.replace("_", " "), reason=action.reason, target="selected page elements", parameters={"details": JSON.stringify(action.parameters)}, reversible=action.reversible) for action in wire_plan.actions],
+                confidence=wire_plan.confidence,
+                warnings=wire_plan.warnings,
+                suggestedScope=wire_plan.suggestedScope,
+                status=wire_plan.status
+            );
+            plan_summary = wire_plan.summary;
+            plan_confidence = wire_plan.confidence;
+            plan_warning = wire_plan.warnings[0] if len(wire_plan.warnings) > 0 else "Every action is allowlisted and reversible.";
+            plan_action_count = len(wire_plan.actions);
+            plan_actions = [action.type.replace("_", " ") + ": " + action.reason for action in wire_plan.actions];
+            rejection_message = "";
+            error_code = "";
+            plan_ready = True;
+            request_state = "preview";
+            request_state_detail = "Preview ready. Nothing has changed on the page yet.";
+        } except Exception as error {
+            error_code = "JAC_UNAVAILABLE";
+            request_state = "llm unavailable";
+            request_state_detail = "The Jac planner could not be reached: " + str(error);
+        }
+    }
+
     def submit_request() {
         if request_text.strip() == "" {
             request_state = "failed";
@@ -295,37 +412,8 @@ def:pub app -> JsxElement {
         request_state_detail = "Jac is considering your profile and the current page.";
         plan_ready = False;
         show_preference_prompt = False;
-        if submit_timer {
-            clearTimeout(submit_timer);
-        }
-        submit_timer = setTimeout(lambda {
-            request = AdaptationRequest(userRequest=request_text, activeProfile=profile, page=PageContext());
-            response = adapter.request_plan(request);
-            error_code = response.errorCode;
-            if response.status == "error" {
-                plan_ready = False;
-                request_state = "llm unavailable" if response.errorCode == "LLM_UNAVAILABLE" else ("stale" if response.errorCode == "STALE_PAGE_REVISION" else "failed");
-                request_state_detail = response.errorMessage;
-                rejection_message = "";
-            } elif response.status == "rejected" or response.plan.status == "rejected" {
-                reviewed_plan = response.plan;
-                plan_ready = False;
-                rejection_message = response.errorMessage;
-                request_state = "rejected";
-                request_state_detail = "The request was rejected safely. Nothing changed on the page.";
-            } else {
-                reviewed_plan = response.plan;
-                plan_summary = response.plan.summary;
-                plan_confidence = response.plan.confidence;
-                plan_warning = response.plan.warnings[0] if len(response.plan.warnings) > 0 else "";
-                plan_action_count = len(response.plan.actions);
-                plan_actions = [action.label + ": " + action.reason for action in response.plan.actions];
-                rejection_message = "";
-                plan_ready = True;
-                request_state = "preview";
-                request_state_detail = "Preview ready. Nothing has changed on the page yet.";
-            }
-        }, 350);
+        if submit_timer { clearTimeout(submit_timer); }
+        submit_timer = setTimeout(lambda { submit_live_request(); }, 100);
     }
 
     def cancel_plan() {
@@ -334,13 +422,20 @@ def:pub app -> JsxElement {
         request_state_detail = "Preview cancelled. You can revise the request.";
     }
 
-    def apply_plan() {
+    async def apply_plan() {
         if not plan_ready {
             return;
         }
         request_state = "applying";
         request_state_detail = "Checking the plan and applying it safely...";
-        result = adapter.apply_plan(reviewed_plan);
+        try {
+            result: any = await bridge.browser.applyAdaptationPlan(reviewed_wire_plan);
+        } except Exception as error {
+            request_state = "failed";
+            error_code = "APPLY_FAILED";
+            request_state_detail = "The page host could not apply the plan: " + str(error);
+            return;
+        }
         if result["status"] == "completed" {
             request_state = "applied";
             request_state_detail = "Completed on the current page.";
@@ -350,36 +445,38 @@ def:pub app -> JsxElement {
             show_preference_prompt = True;
             plan_ready = False;
             error_code = "";
-        } elif result["code"] == "STALE_PAGE_REVISION" {
+        } elif result["error"] and result["error"]["code"] == "STALE_PAGE_REVISION" {
             request_state = "stale";
-            error_code = result["code"];
+            error_code = result["error"]["code"];
             request_state_detail = "The page changed before applying. Refresh the page and retry the request.";
-        } elif result["code"] == "LLM_UNAVAILABLE" {
-            request_state = "llm unavailable";
-            error_code = result["code"];
-            request_state_detail = "The online planner is unavailable. Deterministic controls still work.";
         } elif result["status"] == "rejected" {
             request_state = "rejected";
-            error_code = result["code"];
-            rejection_message = result["message"];
+            error_code = result["error"]["code"] if result["error"] else "INVALID_PLAN";
+            rejection_message = result["error"]["message"] if result["error"] else "The page host rejected the plan.";
             request_state_detail = "The plan was rejected before any page change.";
         } else {
             request_state = "failed";
-            error_code = result["code"];
-            request_state_detail = result["message"];
+            error_code = result["error"]["code"] if result["error"] else "APPLY_FAILED";
+            request_state_detail = result["error"]["message"] if result["error"] else "The page host did not confirm the adaptation.";
         }
     }
 
-    def undo_last_change() {
+    async def undo_last_change() {
         if not can_undo {
             return;
         }
-        result = adapter.undo_plan(undo_token);
+        try {
+            result: any = await bridge.browser.undoAdaptation(undo_token);
+        } except Exception as error {
+            request_state = "failed";
+            request_state_detail = "Undo failed: " + str(error);
+            return;
+        }
         if result["status"] == "completed" {
             can_undo = False;
             request_state = "undone";
             request_state_detail = "The last adaptation was undone.";
-            last_change = result["changed"];
+            last_change = result["result"];
             show_preference_prompt = False;
         } else {
             request_state = "failed";
@@ -387,17 +484,36 @@ def:pub app -> JsxElement {
         }
     }
 
-    def save_preference(scope: str) {
+    async def save_preference(scope: str) {
         if scope == "none" {
             show_preference_prompt = False;
             preference_message = "This change will not be saved.";
             return;
         }
-        rule = adapter.approve_preference(scope, profile);
-        saved_scope = rule.scope;
-        localStorage.setItem("accessible-browser-dev-rule", rule.scope + "|" + rule.value + "|" + rule.createdAt);
-        preference_message = "Approved for " + ("this page" if scope == "page" else ("this website" if scope == "website" else "all websites")) + ".";
-        show_preference_prompt = False;
+        try {
+            timestamp = new(Date).toISOString();
+            rule = {
+                "setting": "accessibilityProfile",
+                "value": profile,
+                "scope": scope,
+                "source": "manual",
+                "explicitlyApproved": True,
+                "createdAt": timestamp,
+                "updatedAt": timestamp,
+                "origin": page_origin,
+                "pageUrl": page_url
+            };
+            result: any = await bridge.accessibleBrowser.jac.saveApprovedPreference(rule, True);
+            if result and result.ok {
+                saved_scope = scope;
+                preference_message = "Approved for " + ("this page" if scope == "page" else ("this website" if scope == "website" else "all websites")) + ".";
+                show_preference_prompt = False;
+            } else {
+                preference_message = "The preference was not saved: " + (result.error.message if result and result.error else "the Jac store rejected it.");
+            }
+        } except Exception as error {
+            preference_message = "The preference was not saved: " + str(error);
+        }
     }
 
     def toggle_simple_mode() {
@@ -544,15 +660,15 @@ def:pub app -> JsxElement {
             </div>
             <div className="adapter-badge" role="status" aria-live="polite">
                 <span className="status-dot"></span>
-                {adapter.source}
+                Jac planner · typed Electron bridge
             </div>
         </header>
 
         <section className="page-context" aria-labelledby="page-context-title">
             <div>
                 <p className="section-kicker">Current page</p>
-                <h2 id="page-context-title">Example article</h2>
-                <p>Ready on tab 1 · revision 1 · article-like page</p>
+                <h2 id="page-context-title">{page_title}</h2>
+                <p>Ready on tab {page_tab_id} · revision {page_revision} · live Chromium snapshot</p>
             </div>
             <p className="bridge-status" role="status" aria-live="polite">{bridge_status}</p>
         </section>
@@ -577,7 +693,7 @@ def:pub app -> JsxElement {
             </div>
             <p className="status-copy" role="status" aria-live="polite">{request_state_detail}</p>
             <p className="context-note">Jac context: {active_preset} profile · {profile.summary()} · current page snapshot available.</p>
-            <p className="context-note">Development state demos: type “offline”, “stale”, or “unsafe” to inspect unavailable, stale, and rejected responses.</p>
+            <p className="context-note">The request is sent to Jac with the current profile and live page snapshot. The preview is validated again by Electron before any page mutation.</p>
         </section>
 
         <div className="content-grid">
@@ -658,7 +774,7 @@ def:pub app -> JsxElement {
                 <span className="confidence">Confidence: {plan_confidence}</span>
             </div>
             <p>{plan_summary}</p>
-            <p className="affected-target">Affected target: current page · tab 1 · revision 1 · {plan_action_count} reversible action(s)</p>
+            <p className="affected-target">Affected target: current page · tab {page_tab_id} · revision {page_revision} · {plan_action_count} reversible action(s)</p>
             <ul className="action-list">{[<li key={index}>{action}</li> for (index, action) in enumerate(plan_actions)]}</ul>
             <p className="warning" role="note">{plan_warning}</p>
             <div className="button-row"><button className="primary-button" onClick={apply_plan}>Apply this plan</button><button className="secondary-button" onClick={cancel_plan}>Cancel</button></div>
@@ -712,6 +828,6 @@ def:pub app -> JsxElement {
             </section>
         </div>
 
-        <footer className="footer-note">Your page content is not saved by this fixture. Approved preference rules are local-first and scoped explicitly.</footer>
+        <footer className="footer-note">Page content is used for the live snapshot only. Approved preference rules are stored locally by Jac and scoped explicitly.</footer>
     </main>
 }

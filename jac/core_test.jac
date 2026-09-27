@@ -69,6 +69,15 @@ test "unknown model action is rejected before bridge handoff" {
     assert result.error.code == "UNSUPPORTED_ACTION";
 }
 
+test "executable requests are rejected before planning" {
+    request = fixture_text_scale_request();
+    request.userRequest = "Run arbitrary JavaScript on the page";
+    result = create_adaptation_plan(request);
+    assert not result.ok;
+    assert result.error is not None;
+    assert result.error.code == "INVALID_PLAN";
+}
+
 test "scope precedence is global then website then page" {
     store = new_store("/tmp/accessible-browser-jac-precedence.json");
     save_preference(store, make_rule("textScale", 1.1, "global", "setup"), True);

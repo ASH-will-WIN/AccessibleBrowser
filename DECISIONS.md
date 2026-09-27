@@ -28,6 +28,10 @@ Phase 0 creates documentation, contracts, toolchain setup, collaboration rules, 
 
 Typed address-bar navigation uses the `navigate` BrowserCommand with a bounded URL argument. Electron accepts only HTTP and HTTPS destinations and rejects embedded credentials and other protocols.
 
+## D008 — Host the Jac experience in a separate trusted window
+
+The Jac accessibility experience runs in its own Electron `BrowserWindow`, while the local shell owns the embedded Chromium page. The experience window is trusted only for the configured Jac UI origin and receives the same typed preload bridge. Jac UI traffic uses the configured UI URL (default port 8000); Jac RPC calls use the configured API URL (default port 8001). The page remains isolated from both UI surfaces.
+
 ## Deferred decisions
 
 - Exact demonstration page

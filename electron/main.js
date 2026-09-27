@@ -11,11 +11,13 @@ const MAX_ELEMENTS = 160;
 const PAGE_WORLD_ID = 1001;
 const tabs = new Map();
 let window;
+let experienceWindow;
 let activeTabId;
 let tabSequence = 0;
 const undoHistory = new Map();
 
-const jacUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
+const jacUiUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
+const jacApiUrl = process.env.ACCESSIBLE_BROWSER_JAC_API_URL || "http://127.0.0.1:8001";
 const jacOperations = new Set([
   "get_active_profile",
   "update_active_profile",
@@ -67,7 +69,7 @@ async function callJac(operation, payload = {}) {
   if (!jacOperations.has(operation)) throw bridgeError("INVALID_MESSAGE", "Jac operation is not allowlisted.");
   let response;
   try {
-    response = await fetch(`${jacUrl.replace(/\/$/, "")}/function/${operation}`, {
+    response = await fetch(`${jacApiUrl.replace(/\/$/, "")}/function/${operation}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -93,15 +95,18 @@ function getActiveTab() {
 }
 
 function notifyPageChanged(tab, reason) {
-  if (window && !window.isDestroyed() && tab.id === activeTabId) {
-    window.webContents.send(`${CHANNEL}page-changed`, {
+  if (tab.id === activeTabId) {
+    const message = {
       schemaVersion: 1,
       tabId: tab.id,
       pageRevision: tab.pageRevision,
       url: redactUrl(tab.view.webContents.getURL()),
       title: tab.view.webContents.getTitle(),
       reason,
-    });
+    };
+    for (const uiWindow of [window, experienceWindow]) {
+      if (uiWindow && !uiWindow.isDestroyed()) uiWindow.webContents.send(`${CHANNEL}page-changed`, message);
+    }
   }
 }
 
@@ -115,8 +120,12 @@ function bumpRevision(tab, reason) {
 }
 
 function isTrustedUi(sender) {
-  if (!window || sender.id !== window.webContents.id) return false;
-  return sender.getURL() === pathToFileURL(path.join(__dirname, "placeholder.html")).href;
+  const shellUrl = pathToFileURL(path.join(__dirname, "placeholder.html")).href;
+  if (window && sender.id === window.webContents.id && sender.getURL() === shellUrl) return true;
+  if (experienceWindow && sender.id === experienceWindow.webContents.id) {
+    try { return new URL(sender.getURL()).origin === new URL(jacUiUrl).origin; } catch { return false; }
+  }
+  return false;
 }
 
 function register(channel, handler) {
@@ -560,6 +569,35 @@ function createWindow() {
     if (window && !window.isDestroyed()) console.error(`Unable to load browser shell: ${error.message}`);
   });
 }
+
+function createExperienceWindow() {
+  experienceWindow = new BrowserWindow({
+    width: 1080,
+    height: 900,
+    minWidth: 760,
+    minHeight: 600,
+    title: "AccessibleBrowser accessibility experience",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  experienceWindow.webContents.on("will-navigate", (event, target) => {
+    try {
+      if (new URL(target).origin !== new URL(jacUiUrl).origin) event.preventDefault();
+    } catch { event.preventDefault(); }
+  });
+  experienceWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  experienceWindow.on("closed", () => { experienceWindow = undefined; });
+  void experienceWindow.loadURL(jacUiUrl).catch((error) => {
+    if (experienceWindow && !experienceWindow.isDestroyed()) {
+      console.error(`Unable to load Jac accessibility experience: ${error.message}`);
+    }
+  });
+}
+
 register("jac", async (request) => {
   requireKeys(request, ["operation"], ["payload"]);
   if (typeof request.operation !== "string" || !jacOperations.has(request.operation)) {
@@ -570,6 +608,7 @@ register("jac", async (request) => {
 
 app.whenReady().then(() => {
   createWindow();
+  createExperienceWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

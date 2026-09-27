@@ -291,6 +291,9 @@ def deterministic_plan(request: AdaptationRequest) -> PlanResult {
     if lowered == "" {
         return plan_error(request.requestId, "INVALID_MESSAGE", "The accessibility request is empty.", False);
     }
+    if contains_any(lowered, ["javascript", "arbitrary css", "shell command", "execute code", "run code"]) {
+        return plan_error(request.requestId, "INVALID_PLAN", "Only allowlisted, reversible accessibility actions are supported; executable code is never accepted.", False);
+    }
 
     actions: list[PlanAction] = [];
     actionNumber = 1;
