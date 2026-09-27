@@ -1,196 +1,35 @@
-"""Jac-owned accessibility experience for the first Phase 1 flow.
+"""Jac-owned accessibility experience for the first live Phase 1 flow.
 
-The UI talks to the Jac planner and Electron page host only through the typed
-preload bridge. The old deterministic adapter remains below for visible state
-demos and offline controls, but natural-language requests use the live path.
+Planning, validation, page mutation, undo, and persistence stay behind the
+typed Jac/Electron facades. The only development-only fallback left here is
+the text command adapter for voice state demonstrations.
 """
 
-obj PreferenceRule {
-    has setting: str = "",
-        value: str = "",
-        scope: str = "page",
-        source: str = "manual",
-        explicitlyApproved: bool = False,
-        createdAt: str = "2026-09-27T00:00:00Z",
-        updatedAt: str = "2026-09-27T00:00:00Z";
+import from .jac.core { AccessibilityProfile, BrowserCommand }
+
+def profile_summary(profile: AccessibilityProfile) -> str {
+    reading = "standard text" if profile.textScale == 1.0 else "larger text";
+    spacing_text = "standard spacing" if profile.spacing == "normal" else "more spacing";
+    contrast_text = "standard contrast" if profile.contrast == "normal" else "high contrast";
+    filter_text = "no color filter" if profile.colorFilter == "none" else "a color filter";
+    motion_text = "reduced motion" if profile.reduceMotion else "normal motion";
+    target_text = "larger click targets" if profile.enlargeTargets else "standard click targets";
+    font_text = "reading font" if profile.readingFont != "default" else "default font";
+    return reading + ", " + spacing_text + ", " + contrast_text + ", " + filter_text + ", " + motion_text + ", " + target_text + ", " + font_text;
 }
 
-obj AccessibilityProfile {
-    has textScale: float = 1.0,
-        spacing: str = "standard",
-        contrast: str = "standard",
-        colorFilter: str = "none",
-        reduceMotion: bool = False,
-        enlargeTargets: bool = False,
-        readingFont: str = "system",
-        voiceEnabled: bool = False;
-
-    def summary() -> str {
-        reading = "standard text" if self.textScale == 1.0 else "larger text";
-        spacing_text = "standard spacing" if self.spacing == "standard" else "more spacing";
-        contrast_text = "standard contrast" if self.contrast == "standard" else "high contrast";
-        filter_text = "no color filter" if self.colorFilter == "none" else "soft color filter";
-        motion_text = "reduced motion" if self.reduceMotion else "normal motion";
-        target_text = "larger click targets" if self.enlargeTargets else "standard click targets";
-        font_text = "reading font" if self.readingFont == "reading" else "system font";
-        return reading + ", " + spacing_text + ", " + contrast_text + ", " + filter_text + ", " + motion_text + ", " + target_text + ", " + font_text;
-    }
+def profile_from_wire(data: any) -> AccessibilityProfile {
+    return AccessibilityProfile(
+        textScale=data.get("textScale", 1.0) as float,
+        spacing=data.get("spacing", "normal") as str,
+        contrast=data.get("contrast", "normal") as str,
+        colorFilter=data.get("colorFilter", "none") as str,
+        reduceMotion=data.get("reduceMotion", False) as bool,
+        enlargeTargets=data.get("enlargeTargets", False) as bool,
+        readingFont=data.get("readingFont", "default") as str,
+        voiceEnabled=data.get("voiceEnabled", False) as bool
+    );
 }
-
-obj PageContext {
-    has snapshotId: str = "snapshot_1",
-        tabId: str = "tab_1",
-        pageRevision: int = 1,
-        title: str = "Example article",
-        origin: str = "https://example.test";
-}
-
-obj AdaptationRequest {
-    has schemaVersion: int = 1,
-        requestId: str = "dev-request-001",
-        tabId: str = "tab_1",
-        pageRevision: int = 1,
-        userRequest: str = "",
-        activeProfile: AccessibilityProfile = AccessibilityProfile(),
-        page: PageContext = PageContext(),
-        applicableRules: list[PreferenceRule] = [],
-        mode: str = "llm";
-}
-
-obj PlanAction {
-    has actionId: str = "",
-        kind: str = "",
-        label: str = "",
-        reason: str = "",
-        target: str = "current page",
-        parameters: dict[str, str] = {},
-        reversible: bool = True;
-}
-
-obj AdaptationPlan {
-    has schemaVersion: int = 1,
-        planId: str = "",
-        requestId: str = "",
-        tabId: str = "tab_1",
-        pageRevision: int = 1,
-        summary: str = "",
-        actions: list[PlanAction] = [],
-        confidence: str = "medium",
-        warnings: list[str] = [],
-        suggestedScope: str = "page",
-        status: str = "ready";
-}
-
-obj AdapterResponse {
-    has status: str = "ready",
-        plan: AdaptationPlan = AdaptationPlan(),
-        errorCode: str = "",
-        errorMessage: str = "",
-        retryable: bool = False;
-}
-
-obj BrowserCommand {
-    has schemaVersion: int = 1,
-        requestId: str = "dev-command-001",
-        tabId: str = "tab_1",
-        kind: str = "read_page",
-        arguments: dict[str, str] = {},
-        requiresConfirmation: bool = False;
-}
-
-obj AccessibilityAdapter {
-    has mode: str = "development",
-        source: str = "typed development fixture";
-
-    def request_plan(request: AdaptationRequest) -> AdapterResponse {
-        user_request = request.userRequest;
-        actions: list[PlanAction] = [];
-        summary = "A small, reversible reading improvement for " + request.page.title + ".";
-        lower_request = user_request.lower();
-
-        if "offline" in lower_request or "unavailable" in lower_request {
-            return AdapterResponse(status="error", errorCode="LLM_UNAVAILABLE", errorMessage="The online planner is unavailable. Use a deterministic control or retry.", retryable=True);
-        }
-        if "stale" in lower_request or "refresh" in lower_request {
-            return AdapterResponse(status="error", errorCode="STALE_PAGE_REVISION", errorMessage="This page changed while the request was being prepared. Refresh the page and retry.", retryable=True);
-        }
-        if "unsafe" in lower_request or "javascript" in lower_request or "arbitrary css" in lower_request {
-            rejected_plan = AdaptationPlan(
-                planId="dev-rejected-plan-001",
-                requestId=request.requestId,
-                tabId=request.tabId,
-                pageRevision=request.pageRevision,
-                summary="Request rejected safely.",
-                confidence="low",
-                warnings=["Only allowlisted, reversible actions are accepted. No arbitrary JavaScript or CSS was generated."],
-                suggestedScope="none",
-                status="rejected"
-            );
-            return AdapterResponse(status="rejected", plan=rejected_plan, errorCode="INVALID_PLAN", errorMessage="The request asks for an action outside the allowlist.");
-        }
-
-        if "simple" in lower_request or "reading" in lower_request or "read" in lower_request {
-            actions = [
-                PlanAction(actionId="dev-action-1", kind="reading_mode", label="Reading mode", reason="Emphasize the main article content and reduce distractions.", parameters={"mode": "article"}),
-                PlanAction(actionId="dev-action-2", kind="set_text_scale", label="Larger text", reason="Make article text easier to scan.", parameters={"scale": "1.15"}),
-                PlanAction(actionId="dev-action-3", kind="set_spacing", label="More spacing", reason="Give lines and paragraphs more breathing room.", parameters={"spacing": "more"})
-            ];
-            summary = "Make " + request.page.title + " easier to read with a modest reading view.";
-        } else {
-            actions = [
-                PlanAction(actionId="dev-action-1", kind="set_text_scale", label="Larger text", reason="Increase text scale on the current page.", parameters={"scale": "1.15"}),
-                PlanAction(actionId="dev-action-2", kind="focus_elements", label="Clearer focus", reason="Make keyboard focus easier to see.", parameters={"style": "high-visibility"})
-            ];
-        }
-
-        plan = AdaptationPlan(
-            planId="dev-plan-001",
-            requestId=request.requestId,
-            tabId=request.tabId,
-            pageRevision=request.pageRevision,
-            summary=summary,
-            actions=actions,
-            confidence="medium",
-            warnings=["Development fixture preview. The real Jac planner and Electron validator will replace this adapter."],
-            suggestedScope="page",
-            status="ready"
-        );
-        return AdapterResponse(status="ready", plan=plan);
-    }
-
-    def apply_plan(plan: AdaptationPlan) -> dict[str, str] {
-        if plan.status != "ready" {
-            return {"status": "rejected", "code": "INVALID_PLAN", "message": "This plan is not ready to apply."};
-        }
-        return {
-            "status": "completed",
-            "undoToken": "dev-undo-001",
-            "changed": plan.summary
-        };
-    }
-
-    def undo_plan(undo_token: str) -> dict[str, str] {
-        return {
-            "status": "completed",
-            "undoToken": undo_token,
-            "changed": "The last development adaptation was undone."
-        };
-    }
-
-    def approve_preference(scope: str, profile: AccessibilityProfile) -> PreferenceRule {
-        return PreferenceRule(
-            setting="accessibilityProfile",
-            value=profile.summary(),
-            scope=scope,
-            source="manual",
-            explicitlyApproved=True,
-            createdAt="2026-09-27T00:00:00Z",
-            updatedAt="2026-09-27T00:00:00Z"
-        );
-    }
-}
-
-glob adapter: AccessibilityAdapter = AccessibilityAdapter();
 
 def:pub app -> JsxElement {
     has request_text: str = "",
@@ -200,8 +39,9 @@ def:pub app -> JsxElement {
         request_state: str = "idle",
         request_state_detail: str = "Ready for a request.",
         plan_ready: bool = False,
-        reviewed_plan: AdaptationPlan = AdaptationPlan(),
         reviewed_wire_plan: dict[str, any] = {},
+        pending_profile: AccessibilityProfile = AccessibilityProfile(),
+        has_pending_profile: bool = False,
         current_page: dict[str, any] = {},
         page_title: str = "Loading current page…",
         page_url: str = "",
@@ -209,6 +49,7 @@ def:pub app -> JsxElement {
         page_revision: int = 0,
         page_origin: str = "",
         plan_summary: str = "",
+        plan_explanation: str = "",
         plan_confidence: str = "",
         plan_warning: str = "",
         plan_actions: list[str] = [],
@@ -220,19 +61,36 @@ def:pub app -> JsxElement {
         last_change: str = "No adaptation applied yet.",
         show_preference_prompt: bool = False,
         preference_message: str = "No approved saved rule for this page.",
+        persistence_message: str = "",
         saved_scope: str = "",
         simple_mode: bool = False,
         focus_highlight: bool = False,
-        voice_state: str = "off",
+        voice_state: str = "unavailable",
         voice_command: str = "",
-        voice_message: str = "Voice mode is off.",
+        voice_message: str = "Voice provider unavailable. Keyboard and text controls are available.",
         voice_command_shape: str = "No command sent yet.",
+        development_adapter_enabled: bool = False,
         bridge_status: str = "Connecting Jac planner and Electron page host…",
         submit_timer: float = 0.0;
 
     bridge: any = window as any;
 
     async can with entry {
+        try {
+            bridge.browser.onPageChanged(lambda (message: any) {
+                if message and message.pageRevision != page_revision {
+                    page_revision = message.pageRevision;
+                    can_undo = False;
+                    if plan_ready {
+                        plan_ready = False;
+                        request_state = "stale";
+                        error_code = "STALE_PAGE_REVISION";
+                        request_state_detail = "The page changed before the preview was applied. Refresh the snapshot and retry.";
+                    }
+                    bridge_status = "Live page changed · preview and undo are no longer current";
+                }
+            });
+        } except Exception { }
         try {
             snapshot: any = await bridge.browser.getActivePageSnapshot();
             if snapshot and snapshot.status == "rejected" {
@@ -247,6 +105,10 @@ def:pub app -> JsxElement {
                 page_revision = snapshot.pageRevision;
                 page_origin = snapshot.origin;
                 bridge_status = "Bridge connected · Jac planner · live Chromium page";
+                browser_state: any = await bridge.browser.getBrowserState();
+                development_adapter_enabled = browser_state.developmentFixtureEnabled if browser_state else False;
+                active_profile: any = await bridge.accessibleBrowser.jac.getActiveProfile();
+                if active_profile { profile = profile_from_wire(active_profile); }
                 rules: any = await bridge.accessibleBrowser.jac.getApplicablePreferences(snapshot.origin, snapshot.url);
                 if rules and len(rules) > 0 {
                     saved_scope = rules[0].scope;
@@ -255,6 +117,7 @@ def:pub app -> JsxElement {
             }
         } except Exception as error {
             bridge_status = "Bridge unavailable: " + str(error);
+            request_state = "unavailable";
             request_state_detail = "The Jac planner is unavailable. Deterministic controls remain available.";
         }
     }
@@ -272,43 +135,69 @@ def:pub app -> JsxElement {
         } elif preset == "Reduced motion" {
             profile = AccessibilityProfile(reduceMotion=True);
         } elif preset == "Easier clicking" {
-            profile = AccessibilityProfile(enlargeTargets=True, spacing="more");
+            profile = AccessibilityProfile(enlargeTargets=True, spacing="comfortable");
         } elif preset == "Custom" {
             active_preset = "Custom";
         } else {
-            profile = AccessibilityProfile(textScale=1.15, spacing="more", readingFont="system");
+            profile = AccessibilityProfile(textScale=1.15, spacing="comfortable", readingFont="default");
         }
         last_change = "Profile ready: " + active_preset + ".";
     }
 
-    def apply_deterministic_change(change: str) {
+    def profile_for_change(change: str) -> AccessibilityProfile {
+        next_profile = AccessibilityProfile(
+            textScale=profile.textScale,
+            spacing=profile.spacing,
+            contrast=profile.contrast,
+            colorFilter=profile.colorFilter,
+            reduceMotion=profile.reduceMotion,
+            enlargeTargets=profile.enlargeTargets,
+            readingFont=profile.readingFont,
+            voiceEnabled=profile.voiceEnabled
+        );
         if change == "larger_text" {
-            profile.textScale = 1.15 if profile.textScale == 1.0 else 1.0;
+            next_profile.textScale = 1.25 if profile.textScale == 1.0 else 1.0;
         } elif change == "spacing" {
-            profile.spacing = "standard" if profile.spacing == "more" else "more";
+            next_profile.spacing = "normal" if profile.spacing == "comfortable" else "comfortable";
         } elif change == "contrast" {
-            profile.contrast = "standard" if profile.contrast == "high" else "high";
+            next_profile.contrast = "normal" if profile.contrast == "high" else "high";
         } elif change == "motion" {
-            profile.reduceMotion = not profile.reduceMotion;
+            next_profile.reduceMotion = not profile.reduceMotion;
         } elif change == "targets" {
-            profile.enlargeTargets = not profile.enlargeTargets;
+            next_profile.enlargeTargets = not profile.enlargeTargets;
         } elif change == "color_filter" {
-            profile.colorFilter = "none" if profile.colorFilter == "soft" else "soft";
+            next_profile.colorFilter = "none" if profile.colorFilter == "grayscale" else "grayscale";
         } elif change == "reading_font" {
-            profile.readingFont = "system" if profile.readingFont == "reading" else "reading";
-        } elif change == "focus" {
-            focus_highlight = not focus_highlight;
+            next_profile.readingFont = "default" if profile.readingFont != "default" else "reading";
         }
-        active_preset = "Custom";
-        request_state = "applied";
-        request_state_detail = "Applied to " + scope_label() + ".";
-        last_change = "Changed " + change.replace("_", " ") + " for " + scope_label() + ". This deterministic path does not need the online planner.";
-        can_undo = True;
-        undo_token = "dev-setting-undo";
-        show_preference_prompt = True;
+        return next_profile;
     }
 
-    async def submit_live_request() {
+    def deterministic_request(change: str) -> str {
+        if change == "larger_text" { return "Make the text larger"; }
+        if change == "spacing" { return "Add more spacing between lines"; }
+        if change == "contrast" { return "Increase contrast"; }
+        if change == "motion" { return "Reduce motion"; }
+        if change == "targets" { return "Make the buttons easier to click"; }
+        if change == "color_filter" { return "Apply a grayscale color filter"; }
+        if change == "focus" { return "Highlight elements for keyboard focus"; }
+        return "Use a more readable font";
+    }
+
+    def apply_deterministic_change(change: str) {
+        pending_profile = profile_for_change(change);
+        has_pending_profile = True;
+        request_text = deterministic_request(change);
+        active_preset = "Custom";
+        request_state = "understanding";
+        request_state_detail = "Jac is preparing a deterministic preview. Nothing has changed on the page yet.";
+        plan_ready = False;
+        show_preference_prompt = False;
+        if submit_timer { clearTimeout(submit_timer); }
+        submit_timer = setTimeout(lambda { request_plan(request_text, "deterministic"); }, 100);
+    }
+
+    async def request_plan(request_value: str, planning_mode: str) {
         try {
             snapshot: any = await bridge.browser.getActivePageSnapshot();
             if not snapshot or snapshot.status == "rejected" {
@@ -323,15 +212,14 @@ def:pub app -> JsxElement {
             page_tab_id = snapshot.tabId;
             page_revision = snapshot.pageRevision;
             page_origin = snapshot.origin;
-            active_profile: any = await bridge.accessibleBrowser.jac.getActiveProfile();
             request_payload = {
                 "requestId": "ui-request-" + str(Date.now()),
-                "userRequest": request_text,
+                "userRequest": request_value,
                 "tabId": snapshot.tabId,
                 "pageRevision": snapshot.pageRevision,
-                "profile": active_profile,
+                "profile": profile,
                 "page": snapshot,
-                "mode": "deterministic"
+                "mode": planning_mode
             };
             adaptation_request: any = await bridge.accessibleBrowser.jac.createAdaptationRequest(request_payload);
             plan_result: any = await bridge.accessibleBrowser.jac.createAdaptationPlan(adaptation_request);
@@ -372,22 +260,11 @@ def:pub app -> JsxElement {
                 "suggestedScope": wire_plan.suggestedScope,
                 "status": wire_plan.status
             };
-            reviewed_plan = AdaptationPlan(
-                schemaVersion=wire_plan.schemaVersion,
-                planId=wire_plan.planId,
-                requestId=wire_plan.requestId,
-                tabId=wire_plan.tabId,
-                pageRevision=wire_plan.pageRevision,
-                summary=wire_plan.summary,
-                actions=[PlanAction(actionId=action.actionId, kind=action.type, label=action.type.replace("_", " "), reason=action.reason, target="selected page elements", parameters={"details": JSON.stringify(action.parameters)}, reversible=action.reversible) for action in wire_plan.actions],
-                confidence=wire_plan.confidence,
-                warnings=wire_plan.warnings,
-                suggestedScope=wire_plan.suggestedScope,
-                status=wire_plan.status
-            );
+            explanation: any = await bridge.accessibleBrowser.jac.explainAdaptationPlan(wire_plan);
             plan_summary = wire_plan.summary;
+            plan_explanation = explanation.whatWillChange if explanation and explanation.whatWillChange else wire_plan.summary;
             plan_confidence = wire_plan.confidence;
-            plan_warning = wire_plan.warnings[0] if len(wire_plan.warnings) > 0 else "Every action is allowlisted and reversible.";
+            plan_warning = "; ".join(wire_plan.warnings) if len(wire_plan.warnings) > 0 else "Every action is allowlisted and reversible.";
             plan_action_count = len(wire_plan.actions);
             plan_actions = [action.type.replace("_", " ") + ": " + action.reason for action in wire_plan.actions];
             rejection_message = "";
@@ -413,7 +290,8 @@ def:pub app -> JsxElement {
         plan_ready = False;
         show_preference_prompt = False;
         if submit_timer { clearTimeout(submit_timer); }
-        submit_timer = setTimeout(lambda { submit_live_request(); }, 100);
+        has_pending_profile = False;
+        submit_timer = setTimeout(lambda { request_plan(request_text, "llm"); }, 100);
     }
 
     def cancel_plan() {
@@ -438,13 +316,31 @@ def:pub app -> JsxElement {
         }
         if result["status"] == "completed" {
             request_state = "applied";
-            request_state_detail = "Completed on the current page.";
-            last_change = plan_summary;
+            request_state_detail = "Electron confirmed the change on the current page.";
+            last_change = plan_explanation;
             can_undo = True;
             undo_token = result["undoToken"];
             show_preference_prompt = True;
             plan_ready = False;
             error_code = "";
+            if "simple mode" in request_text.lower() { simple_mode = True; }
+            if has_pending_profile { profile = pending_profile; has_pending_profile = False; }
+            try {
+                await bridge.accessibleBrowser.jac.recordApplyResult({
+                    "requestId": reviewed_wire_plan["requestId"],
+                    "planId": reviewed_wire_plan["planId"],
+                    "result": result["result"],
+                    "undoToken": result["undoToken"]
+                });
+            } except Exception { }
+            try {
+                proposal: any = await bridge.accessibleBrowser.jac.proposePersistence(reviewed_wire_plan);
+                persistence_message = proposal.message if proposal and proposal.message else "Applying a plan never saves it automatically.";
+                preference_message = persistence_message;
+            } except Exception {
+                persistence_message = "Choose a scope only if you want Jac to remember this change.";
+                preference_message = persistence_message;
+            }
         } elif result["error"] and result["error"]["code"] == "STALE_PAGE_REVISION" {
             request_state = "stale";
             error_code = result["error"]["code"];
@@ -478,6 +374,11 @@ def:pub app -> JsxElement {
             request_state_detail = "The last adaptation was undone.";
             last_change = result["result"];
             show_preference_prompt = False;
+        } elif result["error"] and result["error"]["code"] == "UNDO_FAILED" {
+            can_undo = False;
+            request_state = "stale";
+            error_code = "UNDO_FAILED";
+            request_state_detail = "The page changed, so this undo token is no longer valid. Refresh and retry the adaptation.";
         } else {
             request_state = "failed";
             request_state_detail = "Undo was not confirmed. Please refresh and retry.";
@@ -516,35 +417,26 @@ def:pub app -> JsxElement {
         }
     }
 
-    def toggle_simple_mode() {
-        simple_mode = not simple_mode;
+    async def toggle_simple_mode() {
         if simple_mode {
-            profile.reduceMotion = True;
-            request_state = "applied";
-            request_state_detail = "Simple Mode is on for this page.";
-            last_change = "Reading mode is emphasizing the article and reducing distractions.";
-            can_undo = True;
-            undo_token = "dev-simple-mode-undo";
-        } else {
-            request_state = "undone";
-            request_state_detail = "Returned to the normal page view.";
-            last_change = "Simple Mode is off.";
-            can_undo = False;
+            await undo_last_change();
+            if request_state == "undone" { simple_mode = False; }
+            return;
         }
+        pending_profile = profile_for_change("motion");
+        pending_profile.reduceMotion = True;
+        has_pending_profile = True;
+        request_text = "Simplify this page with reading mode and reduced motion";
+        request_state = "understanding";
+        request_state_detail = "Jac is preparing a Simple Mode preview. Nothing has changed on the page yet.";
+        plan_ready = False;
+        show_preference_prompt = False;
+        await request_plan(request_text, "deterministic");
     }
 
     def start_voice() {
-        if voice_state == "off" or voice_state == "paused after silence" or voice_state == "unavailable" {
-            voice_state = "activating";
-            voice_message = "Starting voice mode. No microphone input is being faked.";
-            setTimeout(lambda {
-                voice_state = "listening";
-                voice_message = "Listening for a constrained browser command.";
-            }, 300);
-        } else {
-            voice_state = "off";
-            voice_message = "Voice mode is off.";
-        }
+        voice_state = "unavailable";
+        voice_message = "Voice provider unavailable. Use keyboard or the development text-command adapter.";
     }
 
     def stop_voice() {
@@ -552,7 +444,20 @@ def:pub app -> JsxElement {
         voice_message = "Voice mode is off.";
     }
 
-    def run_voice_command() {
+    def voice_arguments(command_kind: str) -> dict[str, any] {
+        if command_kind == "scroll" { return {"deltaY": 500}; }
+        if command_kind == "zoom" { return {"factor": 1.1}; }
+        if command_kind == "search" { return {"searchType": "page", "query": "article"}; }
+        if command_kind == "switch_tab" { return {"tabId": page_tab_id}; }
+        return {};
+    }
+
+    async def run_voice_command() {
+        if not development_adapter_enabled {
+            voice_state = "unavailable";
+            voice_message = "Voice provider unavailable, and the development text adapter is disabled outside development mode.";
+            return;
+        }
         if voice_command.strip() == "" {
             voice_message = "Type one of the listed commands to use the development adapter.";
             return;
@@ -565,23 +470,35 @@ def:pub app -> JsxElement {
         }
         voice_state = "processing";
         voice_message = "Checking the command against the allowlist...";
-        setTimeout(lambda {
-            allowed = ["new tab", "close tab", "switch tab", "back", "forward", "reload", "scroll", "zoom", "search", "read page", "stop reading"];
-            if voice_command.lower() in allowed {
-                command_kind = voice_command.lower().replace(" ", "_");
-                command = BrowserCommand(kind=command_kind, arguments={"source": "development text-command adapter"}, requiresConfirmation=command_kind == "close_tab");
+        allowed = ["new tab", "close tab", "switch tab", "back", "forward", "reload", "scroll", "zoom", "search", "read page", "stop reading"];
+        if voice_command.lower() not in allowed {
+            voice_state = "error";
+            voice_message = "That command is not in the constrained browser vocabulary.";
+            return;
+        }
+        command_kind = voice_command.lower().replace(" ", "_");
+        command = BrowserCommand(
+            schemaVersion=1,
+            requestId="voice-command-" + str(Date.now()),
+            tabId=page_tab_id,
+            kind=command_kind,
+            arguments=voice_arguments(command_kind),
+            requiresConfirmation=command_kind == "close_tab"
+        );
+        try {
+            result: any = await bridge.browser.executeBrowserCommand(command);
+            if result and (result.status == "completed" or result.status == "accepted") {
                 voice_state = "speaking/confirming";
-                voice_message = "Development adapter accepted: " + voice_command.lower() + ".";
+                voice_message = "Development text-command adapter sent a constrained browser command. No microphone input was used.";
                 voice_command_shape = "BrowserCommand: " + command.kind + " · requestId " + command.requestId + " · confirmation " + ("required" if command.requiresConfirmation else "not required");
-                setTimeout(lambda {
-                    voice_state = "paused after silence";
-                    voice_message = "Paused after silence. Start voice mode to continue.";
-                }, 800);
             } else {
                 voice_state = "error";
-                voice_message = "That command is not in the constrained browser vocabulary.";
+                voice_message = result.error.message if result and result.error else "The browser command was not accepted.";
             }
-        }, 300);
+        } except Exception as error {
+            voice_state = "error";
+            voice_message = "The development command adapter failed: " + str(error);
+        }
     }
 
     page_styles: str = """
@@ -692,7 +609,7 @@ def:pub app -> JsxElement {
                 <button className="primary-button" onClick={submit_request}>Understand request</button>
             </div>
             <p className="status-copy" role="status" aria-live="polite">{request_state_detail}</p>
-            <p className="context-note">Jac context: {active_preset} profile · {profile.summary()} · current page snapshot available.</p>
+            <p className="context-note">Jac context: {active_preset} profile · {profile_summary(profile)} · current page snapshot available.</p>
             <p className="context-note">The request is sent to Jac with the current profile and live page snapshot. The preview is validated again by Electron before any page mutation.</p>
         </section>
 
@@ -716,9 +633,9 @@ def:pub app -> JsxElement {
                         <span><strong>Larger text</strong><small>Increase text scale</small></span>
                         <span className="toggle-state">{"On" if profile.textScale != 1.0 else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.spacing == "more"} onClick={lambda { apply_deterministic_change("spacing"); }}>
+                    <button className="setting-row" aria-pressed={profile.spacing == "comfortable"} onClick={lambda { apply_deterministic_change("spacing"); }}>
                         <span><strong>More spacing</strong><small>Separate lines and paragraphs</small></span>
-                        <span className="toggle-state">{"On" if profile.spacing == "more" else "Off"}</span>
+                        <span className="toggle-state">{"On" if profile.spacing == "comfortable" else "Off"}</span>
                     </button>
                     <button className="setting-row" aria-pressed={profile.contrast == "high"} onClick={lambda { apply_deterministic_change("contrast"); }}>
                         <span><strong>High contrast</strong><small>Increase visual contrast</small></span>
@@ -745,7 +662,7 @@ def:pub app -> JsxElement {
                         <span className="toggle-state">{"On" if focus_highlight else "Off"}</span>
                     </button>
                 </div>
-                <p className="profile-summary"><strong>{active_preset}</strong> · {profile.summary()}</p>
+                <p className="profile-summary"><strong>{active_preset}</strong> · {profile_summary(profile)}</p>
             </section>
 
             <section className="panel" aria-labelledby="preset-title">
@@ -774,13 +691,14 @@ def:pub app -> JsxElement {
                 <span className="confidence">Confidence: {plan_confidence}</span>
             </div>
             <p>{plan_summary}</p>
+            <p className="context-note">{plan_explanation}</p>
             <p className="affected-target">Affected target: current page · tab {page_tab_id} · revision {page_revision} · {plan_action_count} reversible action(s)</p>
             <ul className="action-list">{[<li key={index}>{action}</li> for (index, action) in enumerate(plan_actions)]}</ul>
             <p className="warning" role="note">{plan_warning}</p>
             <div className="button-row"><button className="primary-button" onClick={apply_plan}>Apply this plan</button><button className="secondary-button" onClick={cancel_plan}>Cancel</button></div>
         </section>}
 
-        {(request_state == "rejected" or request_state == "llm unavailable" or request_state == "stale" or request_state == "failed") and <section className="warning-card" role="alert" aria-labelledby="request-problem-title">
+        {(request_state == "rejected" or request_state == "llm unavailable" or request_state == "unavailable" or request_state == "stale" or request_state == "failed") and <section className="warning-card" role="alert" aria-labelledby="request-problem-title">
             <p className="section-kicker">Request status</p>
             <h2 id="request-problem-title">{request_state}</h2>
             <p>{request_state_detail}</p>
@@ -820,11 +738,14 @@ def:pub app -> JsxElement {
                 <div className="card-heading"><div><p className="section-kicker">Visible voice state</p><h2 id="voice-title">Voice mode</h2></div><span className="state-pill">{voice_state}</span></div>
                 <p role="status" aria-live="polite">{voice_message}</p>
                 <div className="voice-controls"><button className="primary-button" onClick={start_voice}>{"Exit voice mode" if voice_state != "off" else "Start voice mode"}</button><button className="secondary-button" onClick={stop_voice}>Stop</button></div>
-                <label for="voice-command">Development text-command adapter</label>
-                <div className="request-row"><input id="voice-command" value={voice_command} placeholder="read page" onChange={lambda (e: ChangeEvent) { voice_command = e.target.value; }} /><button className="secondary-button" onClick={run_voice_command}>Send command</button></div>
-                <p className="command-list" role="status" aria-live="polite">{voice_command_shape}</p>
-                <p className="command-list">Allowed: new tab · close tab · switch tab · back · forward · reload · scroll · zoom · search · read page · stop reading</p>
-                <p className="context-note">Development state demo: type “voice unavailable” to show the provider-unavailable state.</p>
+                {development_adapter_enabled and <div>
+                    <label for="voice-command">Development text-command adapter (no microphone input)</label>
+                    <div className="request-row"><input id="voice-command" value={voice_command} placeholder="read page" onChange={lambda (e: ChangeEvent) { voice_command = e.target.value; }} /><button className="secondary-button" onClick={run_voice_command}>Send command</button></div>
+                    <p className="command-list" role="status" aria-live="polite">{voice_command_shape}</p>
+                    <p className="command-list">Allowed: new tab · close tab · switch tab · back · forward · reload · scroll · zoom · search · read page · stop reading</p>
+                    <p className="context-note">Voice input is unavailable until a provider is connected. This development adapter sends only the constrained BrowserCommand shape through the typed bridge.</p>
+                </div>}
+                {not development_adapter_enabled and <p className="context-note">Voice input is unavailable, and the development text adapter is disabled outside development mode.</p>}
             </section>
         </div>
 
