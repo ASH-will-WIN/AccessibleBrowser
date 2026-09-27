@@ -321,6 +321,13 @@ def valid_http_url(url: any) -> bool {
     if not isinstance(url, str) or url.strip() == "" or len(url) > 2048 { return False; }
     if "\n" in url or "\r" in url or "\t" in url { return False; }
     lowered = url.lower();
+    # The runtime normalizes browser-style input: hostnames receive https://
+    # and plain text becomes a Google search. Keep protocol validation here for
+    # explicit schemes, while allowing normal address-bar input through.
+    if "://" not in lowered {
+        if lowered.startswith("javascript:") or lowered.startswith("file:") or lowered.startswith("data:") { return False; }
+        return "@" not in url and "%40" not in lowered;
+    }
     if not lowered.startswith("http://") and not lowered.startswith("https://") { return False; }
     authority = url.split("://", 1)[1].split("/", 1)[0].split("?", 1)[0].split("#", 1)[0];
     authorityLower = authority.lower();
