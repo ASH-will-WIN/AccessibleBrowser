@@ -20,9 +20,35 @@ const api = Object.freeze({
   ping: () => invoke("ping"),
 });
 
+function jac(operation, payload = {}) {
+  return invoke("jac", { operation, payload });
+}
+
+const jacApi = Object.freeze({
+    getActiveProfile: () => jac("get_active_profile"),
+    updateActiveProfile: (profile) => jac("update_active_profile", { profile }),
+    getApplicablePreferences: (origin, pageUrl) =>
+      jac("get_applicable_preferences", { origin, pageUrl }),
+    createAdaptationRequest: (request) =>
+      jac("create_adaptation_request", request),
+    createAdaptationPlan: (request) =>
+      jac("create_adaptation_plan", { adaptation: request }),
+    explainAdaptationPlan: (plan) =>
+      jac("explain_adaptation_plan", { plan }),
+    recordApplyResult: (record) =>
+      jac("record_apply_result", record),
+    proposePersistence: (plan) =>
+      jac("propose_persistence", { plan }),
+    saveApprovedPreference: (rule, explicitlyApproved) =>
+      jac("save_approved_preference", { rule, explicitlyApproved }),
+});
+
 contextBridge.exposeInMainWorld("browser", api);
 // Preserve the Phase 0 ping used by the Jac UI smoke surface.
-contextBridge.exposeInMainWorld("accessibleBrowser", Object.freeze({ ping: api.ping }));
+contextBridge.exposeInMainWorld("accessibleBrowser", Object.freeze({
+  ping: api.ping,
+  jac: jacApi,
+}));
 
 function updateBridgeStatus() {
   const status = document.querySelector("[data-bridge-status]");

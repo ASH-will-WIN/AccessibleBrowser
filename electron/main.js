@@ -15,6 +15,20 @@ let activeTabId;
 let tabSequence = 0;
 const undoHistory = new Map();
 
+const jacUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
+const jacOperations = new Set([
+  "get_active_profile",
+  "update_active_profile",
+  "get_applicable_preferences",
+  "create_adaptation_request",
+  "create_adaptation_plan",
+  "explain_adaptation_plan",
+  "record_apply_result",
+  "propose_persistence",
+  "save_approved_preference",
+  "forward_browser_command",
+]);
+
 function makeId(prefix) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -36,10 +50,42 @@ function executePageScript(tab, code) {
 }
 
 function structuredError(error, requestId = makeId("request")) {
-  const allowed = new Set(["INVALID_MESSAGE", "UNSUPPORTED_VERSION", "STALE_PAGE_REVISION", "TARGET_NOT_FOUND", "INVALID_PLAN", "UNSUPPORTED_ACTION", "INVALID_PARAMETERS", "APPLY_FAILED", "UNDO_FAILED", "LLM_UNAVAILABLE", "TIMEOUT", "PERMISSION_DENIED", "USER_CANCELLED"]);
+  const allowed = new Set(["INVALID_MESSAGE", "UNSUPPORTED_VERSION", "STALE_PAGE_REVISION", "TARGET_NOT_FOUND", "INVALID_PLAN", "UNSUPPORTED_ACTION", "INVALID_PARAMETERS", "APPLY_FAILED", "UNDO_FAILED", "LLM_UNAVAILABLE", "TIMEOUT", "PERMISSION_DENIED", "USER_CANCELLED", "JAC_UNAVAILABLE"]);
   const code = allowed.has(error.code) ? error.code : "INVALID_MESSAGE";
-  const detail = { schemaVersion: 1, requestId, code, message: error.message || "Request failed", retryable: code === "TIMEOUT" };
+  const detail = { schemaVersion: 1, requestId, code, message: error.message || "Request failed", retryable: error.retryable === true || code === "TIMEOUT" };
   return { status: "rejected", requestId, error: detail };
+}
+
+function bridgeError(code, message, retryable = false) {
+  const error = new Error(message);
+  error.code = code;
+  error.retryable = retryable;
+  return error;
+}
+
+async function callJac(operation, payload = {}) {
+  if (!jacOperations.has(operation)) throw bridgeError("INVALID_MESSAGE", "Jac operation is not allowlisted.");
+  let response;
+  try {
+    response = await fetch(`${jacUrl.replace(/\/$/, "")}/function/${operation}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw bridgeError("JAC_UNAVAILABLE", `Jac service unavailable: ${error.message}`, true);
+  }
+  let envelope;
+  try {
+    envelope = await response.json();
+  } catch {
+    throw bridgeError("JAC_UNAVAILABLE", "Jac returned a non-JSON response.", true);
+  }
+  if (!response.ok || envelope.ok === false) {
+    const detail = envelope.error?.message || `Jac request failed with HTTP ${response.status}.`;
+    throw bridgeError(envelope.error?.code || "JAC_UNAVAILABLE", detail, response.status >= 500);
+  }
+  return envelope.data?.result ?? envelope.data ?? envelope;
 }
 
 function getActiveTab() {
@@ -416,6 +462,8 @@ register("undo-adaptation", async (token) => {
 register("execute-browser-command", async (command) => {
   requireKeys(command, ["schemaVersion", "requestId", "tabId", "kind", "arguments", "requiresConfirmation"]);
   if (command.schemaVersion !== 1 || typeof command.requestId !== "string" || typeof command.tabId !== "string" || typeof command.kind !== "string" || !validObject(command.arguments) || typeof command.requiresConfirmation !== "boolean") throw new Error("Invalid browser command");
+  const jacValidation = await callJac("forward_browser_command", { command });
+  if (!jacValidation?.ok) return jacValidation;
   const tab = tabs.get(command.tabId);
   const args = command.arguments;
   try {
@@ -512,9 +560,18 @@ function createWindow() {
     if (window && !window.isDestroyed()) console.error(`Unable to load browser shell: ${error.message}`);
   });
 }
+register("jac", async (request) => {
+  requireKeys(request, ["operation"], ["payload"]);
+  if (typeof request.operation !== "string" || !jacOperations.has(request.operation)) {
+    throw bridgeError("INVALID_MESSAGE", "Jac operation is not allowlisted.");
+  }
+  return callJac(request.operation, request.payload || {});
+});
 
 app.whenReady().then(() => {
   createWindow();
-  app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

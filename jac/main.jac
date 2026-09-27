@@ -1,7 +1,7 @@
-"""Phase 0 Jac entrypoint for AccessibleBrowser.
+"""Jac-owned product-layer smoke entrypoint for AccessibleBrowser.
 
-Product logic, profile persistence, adaptation planning, and the UI will be
-added in Phase 1. This file gives the Jac project a stable entrypoint now.
+The public service endpoints live in ``jac/api.jac``; this file remains a
+small CLI smoke target for local Jac tooling.
 """
 
 with entry {
