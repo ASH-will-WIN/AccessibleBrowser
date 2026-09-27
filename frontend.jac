@@ -106,6 +106,13 @@ def:pub app -> JsxElement {
                         request_state_detail = "The page changed before the preview was applied. Refresh the snapshot and retry.";
                     }
                     bridge_status = "Live page changed · preview and undo are no longer current";
+                    if message.reason == "navigation" or message.reason == "loaded" {
+                        auto_apply_saved = True;
+                        request_state = "understanding";
+                        request_state_detail = "Checking your approved accessibility preferences for this page...";
+                        if submit_timer { clearTimeout(submit_timer); }
+                        submit_timer = setTimeout(lambda { request_plan("apply saved accessibility preferences", "deterministic"); }, 100);
+                    }
                 }
             });
         } except Exception { }
@@ -697,7 +704,7 @@ def:pub app -> JsxElement {
         <style>{page_styles}</style>
         <header className="topbar">
             <div>
-                <p className="eyebrow">AccessibleBrowser · Jac experience</p>
+                <p className="eyebrow">Accessa · Jac experience</p>
                 <h1>How should this page work better for you?</h1>
                 <p className="lede">Choose a setting or describe what you need. You review every change before it reaches the page.</p>
             </div>

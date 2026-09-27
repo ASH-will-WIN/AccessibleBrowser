@@ -720,7 +720,7 @@ function createExperienceWindow() {
     height: 900,
     minWidth: 760,
     minHeight: 600,
-    title: "AccessibleBrowser accessibility experience",
+    title: "Accessa accessibility experience",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
