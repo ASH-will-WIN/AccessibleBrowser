@@ -409,6 +409,40 @@ def deterministic_plan(request: AdaptationRequest) -> PlanResult {
     profile = effective_profile(request);
     warnings: list[str] = [];
 
+    # Approved saved preferences are reapplied through the same deterministic
+    # action contract as a user request. They never invoke the LLM and never
+    # create another saved rule.
+    if contains_any(lowered, ["apply saved accessibility preferences", "apply saved preferences"]) {
+        if request.activeProfile.textScale != profile.textScale {
+            actions.append(new_action(actionNumber, "set_text_scale", {"scale": profile.textScale}, "Reapply your approved text-size preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.spacing != profile.spacing {
+            actions.append(new_action(actionNumber, "set_spacing", {"lineHeight": 1.7 if profile.spacing == "comfortable" else 1.0, "letterSpacing": 0.02 if profile.spacing == "comfortable" else 0.0}, "Reapply your approved spacing preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.contrast != profile.contrast {
+            actions.append(new_action(actionNumber, "set_contrast", {"level": profile.contrast}, "Reapply your approved contrast preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.colorFilter != profile.colorFilter {
+            actions.append(new_action(actionNumber, "set_color_filter", {"filter": profile.colorFilter}, "Reapply your approved color-filter preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.readingFont != profile.readingFont {
+            actions.append(new_action(actionNumber, "set_reading_font", {"font": profile.readingFont}, "Reapply your approved reading-font preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.reduceMotion != profile.reduceMotion {
+            actions.append(new_action(actionNumber, "reduce_motion", {"enabled": profile.reduceMotion}, "Reapply your approved reduced-motion preference."));
+            actionNumber += 1;
+        }
+        if request.activeProfile.enlargeTargets != profile.enlargeTargets {
+            actions.append(new_action(actionNumber, "enlarge_targets", {"enabled": profile.enlargeTargets}, "Reapply your approved target-size preference."));
+            actionNumber += 1;
+        }
+    }
+
     if contains_any(lowered, ["text larger", "larger text", "make the text larger", "increase text", "bigger text", "restore standard text size", "normal text size"]) {
         targetScale = 1.25;
         if contains_any(lowered, ["restore standard text size", "normal text size", "reset text size"]) { targetScale = 1.0; }

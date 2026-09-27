@@ -170,7 +170,8 @@ function safeUrl(raw) {
   let candidate = raw.trim();
   if (!candidate) throw new Error("Enter a URL");
   if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(candidate)) {
-    candidate = candidate.includes(" ") ? `https://www.google.com/search?q=${encodeURIComponent(candidate)}` : `https://${candidate}`;
+    const looksLikeHost = candidate === "localhost" || candidate.startsWith("localhost:") || /^\d{1,3}(\.\d{1,3}){3}(?::\d+)?(?:\/|$)/.test(candidate) || candidate.includes(".");
+    candidate = !looksLikeHost ? `https://www.google.com/search?q=${encodeURIComponent(candidate)}` : `https://${candidate}`;
   }
   const parsed = new URL(candidate);
   if (!new Set(["http:", "https:"]).has(parsed.protocol)) throw new Error("Only HTTP and HTTPS pages can be opened");

@@ -77,6 +77,7 @@ def:pub app -> JsxElement {
         bridge_status: str = "Connecting Jac planner and Electron page host…",
         last_planning_mode: str = "llm",
         stale_retry_count: int = 0,
+        auto_apply_saved: bool = False,
         submit_timer: float = 0.0;
 
     bridge: any = window as any;
@@ -129,7 +130,11 @@ def:pub app -> JsxElement {
                 rules: any = await bridge.accessibleBrowser.jac.getApplicablePreferences(snapshot.origin, snapshot.url);
                 if rules and len(rules) > 0 {
                     saved_scope = rules[0].scope;
-                    preference_message = "An approved " + rules[0].scope + " rule is being considered for this page.";
+                    preference_message = "Applying your approved " + rules[0].scope + " accessibility preferences.";
+                    auto_apply_saved = True;
+                    request_state = "understanding";
+                    request_state_detail = "Jac is applying your approved accessibility preferences...";
+                    await request_plan("apply saved accessibility preferences", "deterministic");
                 }
             }
         } except Exception as error {
@@ -161,31 +166,31 @@ def:pub app -> JsxElement {
         last_change = "Profile ready: " + active_preset + ".";
     }
 
-    def profile_for_change(change: str) -> AccessibilityProfile {
+    def profile_for_change(change: str, source: AccessibilityProfile = profile) -> AccessibilityProfile {
         next_profile = AccessibilityProfile(
-            textScale=profile.textScale,
-            spacing=profile.spacing,
-            contrast=profile.contrast,
-            colorFilter=profile.colorFilter,
-            reduceMotion=profile.reduceMotion,
-            enlargeTargets=profile.enlargeTargets,
-            readingFont=profile.readingFont,
-            voiceEnabled=profile.voiceEnabled
+            textScale=source.textScale,
+            spacing=source.spacing,
+            contrast=source.contrast,
+            colorFilter=source.colorFilter,
+            reduceMotion=source.reduceMotion,
+            enlargeTargets=source.enlargeTargets,
+            readingFont=source.readingFont,
+            voiceEnabled=source.voiceEnabled
         );
         if change == "larger_text" {
-            next_profile.textScale = 1.25 if profile.textScale == 1.0 else 1.0;
+            next_profile.textScale = 1.25 if source.textScale == 1.0 else 1.0;
         } elif change == "spacing" {
-            next_profile.spacing = "normal" if profile.spacing == "comfortable" else "comfortable";
+            next_profile.spacing = "normal" if source.spacing == "comfortable" else "comfortable";
         } elif change == "contrast" {
-            next_profile.contrast = "normal" if profile.contrast == "high" else "high";
+            next_profile.contrast = "normal" if source.contrast == "high" else "high";
         } elif change == "motion" {
-            next_profile.reduceMotion = not profile.reduceMotion;
+            next_profile.reduceMotion = not source.reduceMotion;
         } elif change == "targets" {
-            next_profile.enlargeTargets = not profile.enlargeTargets;
+            next_profile.enlargeTargets = not source.enlargeTargets;
         } elif change == "color_filter" {
-            next_profile.colorFilter = "none" if profile.colorFilter == "grayscale" else "grayscale";
+            next_profile.colorFilter = "none" if source.colorFilter == "grayscale" else "grayscale";
         } elif change == "reading_font" {
-            next_profile.readingFont = "default" if profile.readingFont != "default" else "reading";
+            next_profile.readingFont = "default" if source.readingFont != "default" else "reading";
         }
         return next_profile;
     }
@@ -206,13 +211,33 @@ def:pub app -> JsxElement {
         return "Use a more readable font";
     }
 
-    def apply_deterministic_change(change: str) {
-        pending_profile = profile_for_change(change);
+    def toggle_quick_action(change: str) {
+        base_profile = pending_profile if has_pending_profile else profile;
+        pending_profile = profile_for_change(change, base_profile);
         has_pending_profile = True;
-        request_text = deterministic_request(change);
         active_preset = "Custom";
+        request_state = "ready";
+        request_state_detail = "Quick actions selected. Apply them together when ready.";
+    }
+
+    def quick_action_request() -> str {
+        changes: list[str] = [];
+        if pending_profile.textScale != profile.textScale { changes.append("make the text larger" if pending_profile.textScale != 1.0 else "restore standard text size"); }
+        if pending_profile.spacing != profile.spacing { changes.append("add more spacing" if pending_profile.spacing == "comfortable" else "restore standard spacing"); }
+        if pending_profile.contrast != profile.contrast { changes.append("increase contrast" if pending_profile.contrast == "high" else "restore standard contrast"); }
+        if pending_profile.reduceMotion != profile.reduceMotion { changes.append("reduce motion" if pending_profile.reduceMotion else "restore normal motion"); }
+        if pending_profile.enlargeTargets != profile.enlargeTargets { changes.append("make the buttons easier to click" if pending_profile.enlargeTargets else "restore standard click targets"); }
+        if pending_profile.colorFilter != profile.colorFilter { changes.append("apply a grayscale color filter" if pending_profile.colorFilter != "none" else "remove the color filter"); }
+        if pending_profile.readingFont != profile.readingFont { changes.append("use a more readable font" if pending_profile.readingFont == "reading" else "restore the default font"); }
+        return " and ".join(changes);
+    }
+
+    def apply_quick_actions() {
+        if not has_pending_profile { return; }
+        request_text = quick_action_request();
+        if request_text.strip() == "" { has_pending_profile = False; return; }
         request_state = "understanding";
-        request_state_detail = "Jac is preparing a deterministic preview. Nothing has changed on the page yet.";
+        request_state_detail = "Jac is preparing one combined deterministic change...";
         plan_ready = False;
         show_preference_prompt = False;
         stale_retry_count = 0;
@@ -263,6 +288,14 @@ def:pub app -> JsxElement {
             plan_summary = wire_plan.summary if wire_plan.summary else "Jac did not identify a supported accessibility change.";
             plan_warning = "; ".join(wire_plan.warnings) if len(wire_plan.warnings) > 0 else "Try a specific request such as larger text, more spacing, higher contrast, reduced motion, larger click targets, a color filter, reading font, or reading mode.";
             if wire_plan.status != "ready" or len(wire_plan.actions) == 0 {
+                if auto_apply_saved {
+                    auto_apply_saved = False;
+                    request_state = "idle";
+                    request_state_detail = "Your approved accessibility preferences are already active.";
+                    error_code = "";
+                    rejection_message = "";
+                    return;
+                }
                 error_code = "NO_OP";
                 rejection_message = plan_summary;
                 request_state = "rejected";
@@ -300,6 +333,10 @@ def:pub app -> JsxElement {
             rejection_message = "";
             error_code = "";
             plan_ready = True;
+            if auto_apply_saved {
+                await apply_plan();
+                return;
+            }
             request_state = "preview";
             request_state_detail = "Preview ready. Nothing has changed on the page yet.";
         } except Exception as error {
@@ -351,7 +388,8 @@ def:pub app -> JsxElement {
             last_change = plan_explanation;
             can_undo = True;
             undo_token = result["undoToken"];
-            show_preference_prompt = True;
+            show_preference_prompt = not auto_apply_saved;
+            auto_apply_saved = False;
             plan_ready = False;
             error_code = "";
             simple_mode_before_apply = simple_mode;
@@ -447,24 +485,39 @@ def:pub app -> JsxElement {
         }
         try {
             timestamp = new(Date).toISOString();
-            rule = {
-                "setting": "accessibilityProfile",
-                "value": profile,
-                "scope": scope,
-                "source": "manual",
-                "explicitlyApproved": True,
-                "createdAt": timestamp,
-                "updatedAt": timestamp,
-                "origin": page_origin,
-                "pageUrl": page_url
-            };
-            result: any = await bridge.accessibleBrowser.jac.saveApprovedPreference(rule, True);
-            if result and result.ok {
+            origin_value = page_origin if scope != "global" else "";
+            page_value = page_url if scope == "page" else "";
+            settings = [
+                {"setting": "textScale", "value": profile.textScale},
+                {"setting": "spacing", "value": profile.spacing},
+                {"setting": "contrast", "value": profile.contrast},
+                {"setting": "colorFilter", "value": profile.colorFilter},
+                {"setting": "reduceMotion", "value": profile.reduceMotion},
+                {"setting": "enlargeTargets", "value": profile.enlargeTargets},
+                {"setting": "readingFont", "value": profile.readingFont}
+            ];
+            all_saved = True;
+            for setting in settings {
+                rule = {
+                    "setting": setting["setting"],
+                    "value": setting["value"],
+                    "scope": scope,
+                    "source": "manual",
+                    "explicitlyApproved": True,
+                    "createdAt": timestamp,
+                    "updatedAt": timestamp,
+                    "origin": origin_value,
+                    "pageUrl": page_value
+                };
+                result: any = await bridge.accessibleBrowser.jac.saveApprovedPreference(rule, True);
+                if not result or not result.ok { all_saved = False; }
+            }
+            if all_saved {
                 saved_scope = scope;
                 preference_message = "Approved for " + ("this page" if scope == "page" else ("this website" if scope == "website" else "all websites")) + ".";
                 show_preference_prompt = False;
             } else {
-                preference_message = "The preference was not saved: " + (result.error.message if result and result.error else "the Jac store rejected it.");
+                preference_message = "The preference was not saved: Jac rejected one or more profile settings.";
             }
         } except Exception as error {
             preference_message = "The preference was not saved: " + str(error);
@@ -557,57 +610,59 @@ def:pub app -> JsxElement {
     }
 
     page_styles: str = """
-        body { margin: 0; background: #f4f7f9; color: #17212b; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        :root { color-scheme: dark; }
+        body { margin: 0; background: #202124; color: #f1f3f4; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
         button, input { font: inherit; }
-        button { cursor: pointer; border: 0; border-radius: 10px; padding: 11px 14px; color: #17212b; background: #e9eef3; font-weight: 750; }
-        button:hover { filter: brightness(0.97); }
-        button:focus-visible, input:focus-visible { outline: 3px solid #155eef; outline-offset: 3px; }
-        .experience-shell { max-width: 1120px; margin: 0 auto; padding: 36px 24px 56px; }
+        button { cursor: pointer; border: 1px solid #4a4d52; border-radius: 10px; padding: 11px 14px; color: #f1f3f4; background: #303134; font-weight: 750; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
+        button:hover { border-color: #6e7781; background: #3c4043; transform: translateY(-1px); }
+        button:focus-visible, input:focus-visible { outline: 3px solid #8ab4f8; outline-offset: 3px; }
+        .experience-shell { max-width: 1180px; margin: 0 auto; padding: 32px 24px 56px; }
         .topbar, .card-heading, .page-context, .request-row, .scope-row, .button-row, .voice-controls { display: flex; align-items: center; gap: 16px; }
         .topbar, .page-context, .card-heading { justify-content: space-between; }
         .topbar { align-items: flex-start; gap: 28px; margin-bottom: 24px; }
-        .eyebrow, .section-kicker { margin: 0 0 8px; color: #155eef; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .eyebrow, .section-kicker { margin: 0 0 8px; color: #8ab4f8; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
         h1, h2, h3, p { margin-top: 0; }
-        h1 { max-width: 720px; margin-bottom: 12px; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.04; letter-spacing: -.04em; }
+        h1 { max-width: 720px; margin-bottom: 12px; font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.08; letter-spacing: -.035em; }
         h2 { margin-bottom: 0; font-size: 1.2rem; }
         h3 { margin-bottom: 8px; }
-        .lede { max-width: 680px; margin-bottom: 0; color: #536273; font-size: 1.05rem; line-height: 1.55; }
-        .adapter-badge, .state-pill, .confidence, .small-label { border-radius: 999px; padding: 7px 11px; background: #e8f0ff; color: #1249a0; font-size: .78rem; font-weight: 750; white-space: nowrap; }
-        .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #14804a; }
-        .page-context, .request-card, .panel, .plan-card, .result-card { border: 1px solid #d6e0e8; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(23, 33, 43, .06); }
-        .warning-card { margin-bottom: 18px; border: 1px solid #e3a008; border-radius: 18px; padding: 24px; background: #fff8e1; color: #654b00; }
+        .lede { max-width: 680px; margin-bottom: 0; color: #bdc1c6; font-size: 1.02rem; line-height: 1.55; }
+        .adapter-badge, .state-pill, .confidence, .small-label { border-radius: 999px; padding: 7px 11px; background: #293b5a; color: #a8c7fa; font-size: .78rem; font-weight: 750; white-space: nowrap; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #81c995; box-shadow: 0 0 10px rgba(129, 201, 149, .55); }
+        .page-context, .request-card, .panel, .plan-card, .result-card { border: 1px solid #3c4043; border-radius: 16px; background: #292a2d; box-shadow: 0 14px 34px rgba(0, 0, 0, .22); }
+        .warning-card { margin-bottom: 18px; border: 1px solid #80621d; border-radius: 16px; padding: 24px; background: #332d1e; color: #f8d486; }
         .page-context, .request-card, .plan-card, .result-card { padding: 24px; }
         .page-context, .request-card, .plan-card, .result-card { margin-bottom: 18px; }
         .page-context h2 { margin-bottom: 5px; }
-        .page-context p:last-child, .bridge-status, .context-note, .affected-target, .saved-rule, .footer-note, .command-list { margin-bottom: 0; color: #536273; font-size: .9rem; }
+        .page-context p:last-child, .bridge-status, .context-note, .affected-target, .saved-rule, .footer-note, .command-list { margin-bottom: 0; color: #bdc1c6; font-size: .9rem; }
         .bridge-status { max-width: 340px; text-align: right; }
         .request-card label, .voice-controls + label { display: block; margin-bottom: 8px; font-weight: 700; }
         .request-row { align-items: stretch; }
-        input { min-width: 0; flex: 1; border: 2px solid #b7c5d2; border-radius: 10px; padding: 13px 14px; color: #17212b; background: #fff; }
-        input::placeholder { color: #647487; }
-        .primary-button { color: #fff; background: #155eef; }
-        .secondary-button { border: 1px solid #9fb0c0; background: #fff; }
-        .text-button { padding: 4px 0; color: #155eef; background: transparent; text-decoration: underline; }
+        input { min-width: 0; flex: 1; border: 1px solid #5f6368; border-radius: 10px; padding: 13px 14px; color: #f1f3f4; background: #202124; }
+        input::placeholder { color: #9aa0a6; }
+        .primary-button { border-color: #8ab4f8; color: #202124; background: #8ab4f8; }
+        .primary-button:hover { border-color: #aecbfa; background: #aecbfa; }
+        .secondary-button { border: 1px solid #5f6368; background: #303134; }
+        .text-button { padding: 4px 0; color: #8ab4f8; background: transparent; text-decoration: underline; }
         .status-copy { margin: 14px 0 8px; font-weight: 700; }
         .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
         .panel { padding: 22px; }
-        .scope-row { flex-wrap: wrap; margin: 20px 0 12px; color: #536273; font-size: .9rem; font-weight: 700; }
-        .scope-button { border: 1px solid #b7c5d2; padding: 8px 10px; background: #fff; font-size: .85rem; }
-        .scope-button.selected, .preset-button.chosen { border-color: #155eef; color: #1249a0; background: #e8f0ff; }
+        .scope-row { flex-wrap: wrap; margin: 20px 0 12px; color: #bdc1c6; font-size: .9rem; font-weight: 700; }
+        .scope-button { border: 1px solid #5f6368; padding: 8px 10px; background: #303134; font-size: .85rem; }
+        .scope-button.selected, .preset-button.chosen { border-color: #8ab4f8; color: #a8c7fa; background: #293b5a; }
         .control-list, .preset-list { display: grid; gap: 9px; }
-        .setting-row, .preset-button { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; border: 1px solid #d6e0e8; padding: 13px 14px; background: #fbfcfd; text-align: left; }
-        .setting-row:hover, .preset-button:hover { border-color: #6e8eac; background: #f4f8fc; }
+        .setting-row, .preset-button { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; border: 1px solid #3c4043; padding: 13px 14px; background: #303134; text-align: left; }
+        .setting-row:hover, .preset-button:hover { border-color: #6f8fc8; background: #293b5a; }
         .setting-row strong, .preset-button strong { display: block; margin-bottom: 4px; }
-        .setting-row small, .preset-button small { display: block; color: #536273; font-weight: 500; }
-        .toggle-state { min-width: 38px; color: #1249a0; font-size: .82rem; text-align: right; }
-        .profile-summary { margin: 16px 0 0; color: #536273; font-size: .9rem; line-height: 1.45; }
-        .plan-card { border-color: #8cb4ff; background: #f8fbff; }
+        .setting-row small, .preset-button small { display: block; color: #bdc1c6; font-weight: 500; }
+        .toggle-state { min-width: 38px; color: #a8c7fa; font-size: .82rem; text-align: right; }
+        .profile-summary { margin: 16px 0 0; color: #bdc1c6; font-size: .9rem; line-height: 1.45; }
+        .plan-card { border-color: #5878ae; background: #232f43; }
         .plan-card > p, .result-card > p, .simple-mode-card > p, .panel > p { line-height: 1.5; }
         .affected-target { margin: 12px 0; }
         .action-list { margin: 0 0 14px; padding-left: 22px; line-height: 1.55; }
-        .warning, .mode-note { border-left: 4px solid #e3a008; padding: 10px 12px; background: #fff8e1; color: #654b00; line-height: 1.45; }
-        .preference-prompt { margin-top: 18px; border-top: 1px solid #d6e0e8; padding-top: 18px; }
-        .preference-prompt p { color: #536273; }
+        .warning, .mode-note { border-left: 4px solid #e3a008; padding: 10px 12px; background: #332d1e; color: #f8d486; line-height: 1.45; }
+        .preference-prompt { margin-top: 18px; border-top: 1px solid #3c4043; padding-top: 18px; }
+        .preference-prompt p { color: #bdc1c6; }
         .button-row { flex-wrap: wrap; }
         .simple-mode-card .primary-button { margin-top: 4px; }
         .voice-controls { margin-bottom: 16px; }
@@ -684,39 +739,40 @@ def:pub app -> JsxElement {
                     <button className={"scope-button " + ("selected" if selected_scope == "global" else "")} onClick={lambda { selected_scope = "global"; }}>All websites</button>
                 </div>
                 <div className="control-list">
-                    <button className="setting-row" aria-pressed={profile.textScale != 1.0} onClick={lambda { apply_deterministic_change("larger_text"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.textScale if has_pending_profile else profile.textScale) != 1.0} onClick={lambda { toggle_quick_action("larger_text"); }}>
                         <span><strong>Larger text</strong><small>Increase text scale</small></span>
-                        <span className="toggle-state">{"On" if profile.textScale != 1.0 else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.textScale if has_pending_profile else profile.textScale) != 1.0 else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.spacing == "comfortable"} onClick={lambda { apply_deterministic_change("spacing"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.spacing if has_pending_profile else profile.spacing) == "comfortable"} onClick={lambda { toggle_quick_action("spacing"); }}>
                         <span><strong>More spacing</strong><small>Separate lines and paragraphs</small></span>
-                        <span className="toggle-state">{"On" if profile.spacing == "comfortable" else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.spacing if has_pending_profile else profile.spacing) == "comfortable" else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.contrast == "high"} onClick={lambda { apply_deterministic_change("contrast"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.contrast if has_pending_profile else profile.contrast) == "high"} onClick={lambda { toggle_quick_action("contrast"); }}>
                         <span><strong>High contrast</strong><small>Increase visual contrast</small></span>
-                        <span className="toggle-state">{"On" if profile.contrast == "high" else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.contrast if has_pending_profile else profile.contrast) == "high" else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.reduceMotion} onClick={lambda { apply_deterministic_change("motion"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.reduceMotion if has_pending_profile else profile.reduceMotion)} onClick={lambda { toggle_quick_action("motion"); }}>
                         <span><strong>Reduced motion</strong><small>Limit animated movement</small></span>
-                        <span className="toggle-state">{"On" if profile.reduceMotion else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.reduceMotion if has_pending_profile else profile.reduceMotion) else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.enlargeTargets} onClick={lambda { apply_deterministic_change("targets"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.enlargeTargets if has_pending_profile else profile.enlargeTargets)} onClick={lambda { toggle_quick_action("targets"); }}>
                         <span><strong>Larger click targets</strong><small>Make controls easier to activate</small></span>
-                        <span className="toggle-state">{"On" if profile.enlargeTargets else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.enlargeTargets if has_pending_profile else profile.enlargeTargets) else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.colorFilter != "none"} onClick={lambda { apply_deterministic_change("color_filter"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.colorFilter if has_pending_profile else profile.colorFilter) != "none"} onClick={lambda { toggle_quick_action("color_filter"); }}>
                         <span><strong>Color filter</strong><small>Use a soft reading tint</small></span>
-                        <span className="toggle-state">{"On" if profile.colorFilter != "none" else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.colorFilter if has_pending_profile else profile.colorFilter) != "none" else "Off"}</span>
                     </button>
-                    <button className="setting-row" aria-pressed={profile.readingFont == "reading"} onClick={lambda { apply_deterministic_change("reading_font"); }}>
+                    <button className="setting-row" aria-pressed={(pending_profile.readingFont if has_pending_profile else profile.readingFont) == "reading"} onClick={lambda { toggle_quick_action("reading_font"); }}>
                         <span><strong>Reading font</strong><small>Use a more readable font choice</small></span>
-                        <span className="toggle-state">{"On" if profile.readingFont == "reading" else "Off"}</span>
+                        <span className="toggle-state">{"On" if (pending_profile.readingFont if has_pending_profile else profile.readingFont) == "reading" else "Off"}</span>
                     </button>
                     <button className="setting-row" aria-pressed={focus_highlight} onClick={lambda { apply_deterministic_change("focus"); }}>
                         <span><strong>Focus highlights</strong><small>Make keyboard focus easier to see</small></span>
                         <span className="toggle-state">{"On" if focus_highlight else "Off"}</span>
                     </button>
                 </div>
+                {has_pending_profile and <div className="button-row quick-actions-apply"><button className="primary-button" onClick={apply_quick_actions}>Apply quick actions</button><button className="text-button" onClick={lambda { has_pending_profile = False; request_state_detail = "Quick actions cleared."; }}>Clear</button></div>}
                 <p className="profile-summary"><strong>{active_preset}</strong> · {profile_summary(profile)}</p>
             </section>
 

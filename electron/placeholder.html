@@ -6,25 +6,42 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" />
     <title>AccessibleBrowser</title>
     <style>
-      :root { color-scheme: light; font: 14px system-ui, sans-serif; color: #172334; background: #f3f6fa; }
+      :root { color-scheme: dark; font: 14px system-ui, sans-serif; color: #e8eaed; background: #202124; }
       * { box-sizing: border-box; }
-      body { height: 150px; margin: 0; padding: 10px 14px; overflow: hidden; border-bottom: 1px solid #cbd5e1; }
-      header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-      h1 { margin: 0; font-size: 16px; white-space: nowrap; }
+      body { height: 150px; margin: 0; padding: 0 12px 9px; overflow: hidden; border-bottom: 1px solid #17181a; background: #202124; }
+      header { display: flex; align-items: center; gap: 10px; height: 39px; }
+      h1 { margin: 0; color: #e8eaed; font-size: 13px; font-weight: 600; white-space: nowrap; }
+      .browser-mark { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; color: #202124; background: linear-gradient(135deg, #8ab4f8, #81c995); font-size: 12px; font-weight: 800; }
+      .tab-strip { display: flex; align-items: end; gap: 4px; height: 34px; margin: 0 -12px; padding: 0 12px; background: #17181a; }
+      #tab-list { display: flex; align-items: end; gap: 4px; min-width: 0; }
+      .tab { display: flex; align-items: center; gap: 8px; min-width: 180px; max-width: 280px; height: 30px; padding: 0 10px; border: 0; border-radius: 9px 9px 0 0; color: #bdc1c6; background: #202124; font-size: 12px; }
+      .tab.active { color: #e8eaed; background: #292a2d; }
+      .tab-dot { width: 8px; height: 8px; border-radius: 50%; background: #8ab4f8; }
+      .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tab-close { margin-left: auto; padding: 0 3px; color: #9aa0a6; background: transparent; }
+      .new-tab-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; color: #bdc1c6; font-size: 18px; }
       [hidden] { display: none !important; }
-      #bridge-status { color: #167044; font-size: 12px; }
+      #bridge-status { color: #81c995; font-size: 11px; }
       #navigation, #tools { display: flex; gap: 7px; align-items: center; margin-bottom: 7px; }
-      button { border: 1px solid #b8c5d6; border-radius: 6px; background: white; padding: 5px 9px; color: #172334; cursor: pointer; }
-      button:hover { background: #e8eef6; }
+      button { border: 1px solid transparent; border-radius: 7px; background: #303134; padding: 5px 9px; color: #e8eaed; cursor: pointer; }
+      button:hover { border-color: #5f6368; background: #3c4043; }
       button:disabled { opacity: .5; cursor: default; }
-      #address { min-width: 120px; flex: 1; border: 1px solid #b8c5d6; border-radius: 6px; padding: 6px 9px; font: inherit; }
-      #message { display: inline-block; max-width: 56vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #43536a; font-size: 12px; vertical-align: middle; }
-      #page-title { font-size: 12px; color: #43536a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+      #address { min-width: 120px; flex: 1; border: 1px solid #5f6368; border-radius: 18px; padding: 7px 14px; color: #e8eaed; background: #303134; font: inherit; }
+      #address:focus { border-color: #8ab4f8; outline: none; background: #292a2d; }
+      #message { display: inline-block; max-width: 56vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9aa0a6; font-size: 12px; vertical-align: middle; }
+      #page-title { font-size: 11px; color: #9aa0a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+      #back, #forward, #reload { width: 28px; padding: 5px 0; border-radius: 50%; background: transparent; font-size: 16px; }
+      #go, #new-tab { background: #8ab4f8; color: #202124; font-weight: 650; }
     </style>
   </head>
   <body>
+    <div class="tab-strip" aria-label="Browser tabs">
+      <div id="tab-list" aria-live="polite"></div>
+      <button class="new-tab-icon" id="new-tab-top" type="button" aria-label="New tab">+</button>
+    </div>
     <header>
-      <h1>AccessibleBrowser runtime shell</h1>
+      <span class="browser-mark" aria-hidden="true">A</span>
+      <h1>AccessibleBrowser</h1>
       <span id="bridge-status" data-bridge-status>Connecting bridge…</span>
       <span id="page-title">Starting Chromium…</span>
     </header>
@@ -32,14 +49,12 @@
       <button id="back" type="button" aria-label="Go back">←</button>
       <button id="forward" type="button" aria-label="Go forward">→</button>
       <button id="reload" type="button" aria-label="Reload page">↻</button>
-      <input id="address" aria-label="Website address" placeholder="Enter a web address or search" autocomplete="off" />
-      <button type="submit">Go</button>
-      <button id="new-tab" type="button">New tab</button>
+      <input id="address" aria-label="Website address" placeholder="Search Google or enter an address" autocomplete="off" spellcheck="false" />
+      <button id="go" type="submit">Go</button>
     </form>
     <div id="tools">
       <button id="snapshot" type="button">Page snapshot</button>
       <button id="experience" type="button">Open accessibility panel</button>
-      <button id="scale" type="button" hidden>Text +25% (development fixture)</button>
       <button id="undo" type="button" disabled>Undo adaptation</button>
       <span id="message" role="status">The live webpage is isolated in its own Chromium surface.</span>
     </div>
@@ -58,20 +73,51 @@
         return result;
       }
       async function state() { return unwrap(await window.browser.getBrowserState()); }
-      async function command(kind, args = {}) {
+      async function command(kind, args = {}, requiresConfirmation = false) {
         const current = await state();
         const tabId = current.activeTabId;
         const result = unwrap(await window.browser.executeBrowserCommand({
           schemaVersion: 1, requestId: requestId(), tabId, kind,
-          arguments: args, requiresConfirmation: false,
+          arguments: args, requiresConfirmation,
         }));
         if (result.status === "rejected" || result.status === "failed") throw new Error(result.message || result.result || "Command failed");
         return result;
       }
       function show(message) { status.textContent = message; }
+      function renderTabs(current) {
+        const list = document.querySelector("#tab-list");
+        list.replaceChildren();
+        current.tabs.forEach((tab) => {
+          const tabButton = document.createElement("button");
+          tabButton.className = `tab${tab.tabId === current.activeTabId ? " active" : ""}`;
+          tabButton.type = "button";
+          tabButton.setAttribute("aria-current", tab.tabId === current.activeTabId ? "page" : "false");
+          tabButton.title = tab.title || tab.url || "New tab";
+          const dot = document.createElement("span"); dot.className = "tab-dot";
+          const label = document.createElement("span"); label.className = "tab-title"; label.textContent = tab.title || tab.url || "New tab";
+          const close = document.createElement("span"); close.className = "tab-close"; close.textContent = "×";
+          tabButton.append(dot, label, close);
+          tabButton.addEventListener("click", async (event) => {
+            if (event.target === close) {
+              event.stopPropagation();
+              try {
+                if (tab.tabId !== current.activeTabId) await command("switch_tab", { tabId: tab.tabId });
+                await command("close_tab", {}, true);
+                updateShellState();
+                show("Tab closed.");
+              }
+              catch (error) { show(error.message); }
+              return;
+            }
+            try { await command("switch_tab", { tabId: tab.tabId }); updateShellState(); }
+            catch (error) { show(error.message); }
+          });
+          list.append(tabButton);
+        });
+      }
       function updateShellState() {
         window.browser.getBrowserState().then(unwrap).then((current) => {
-          document.querySelector("#scale").hidden = !current.developmentFixtureEnabled;
+          renderTabs(current);
           const active = current.tabs.find((tab) => tab.tabId === current.activeTabId);
           if (active) { address.value = active.url; title.textContent = active.title || active.url; }
         }).catch((error) => show(error.message));
@@ -82,11 +128,18 @@
         try { await command("navigate", { url: address.value }); show("Opening page…"); }
         catch (error) { show(error.message); }
       });
+      document.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "l") {
+          event.preventDefault();
+          address.focus();
+          address.select();
+        }
+      });
       document.querySelector("#back").addEventListener("click", () => command("back").catch((error) => show(error.message)));
       document.querySelector("#forward").addEventListener("click", () => command("forward").catch((error) => show(error.message)));
       document.querySelector("#reload").addEventListener("click", () => command("reload").catch((error) => show(error.message)));
-      document.querySelector("#new-tab").addEventListener("click", async () => {
-        try { await command("new_tab"); address.value = ""; show("New tab opened."); }
+      document.querySelector("#new-tab-top").addEventListener("click", async () => {
+        try { await command("new_tab"); address.value = ""; updateShellState(); show("New tab opened."); }
         catch (error) { show(error.message); }
       });
 
@@ -104,22 +157,6 @@
           show("Accessibility panel opened. Use Jac to preview, apply, undo, and save changes.");
         } catch (error) { show(`Accessibility panel failed: ${error.message}`); }
       });
-      document.querySelector("#scale").addEventListener("click", async () => {
-        try {
-          const page = unwrap(await window.browser.getActivePageSnapshot());
-          lastSnapshot = page;
-          const result = unwrap(await window.browser.applyAdaptationPlan({
-            schemaVersion: 1, planId: requestId(), requestId: requestId(), tabId: page.tabId,
-            pageRevision: page.pageRevision, summary: "Increase text size by 25%", actions: [{
-              actionId: requestId(), type: "set_text_scale", parameters: { scale: 1.25 },
-              reason: "Make webpage text easier to read", reversible: true,
-            }], confidence: "high", warnings: [], suggestedScope: "none", status: "ready",
-          }));
-          lastUndoToken = result.undoToken;
-          undoButton.disabled = false;
-          show(result.result);
-        } catch (error) { show(`Adaptation failed: ${error.message}`); }
-      });
       undoButton.addEventListener("click", async () => {
         try {
           const result = unwrap(await window.browser.undoAdaptation(lastUndoToken));
@@ -135,7 +172,7 @@
           undoButton.disabled = true;
         }
         if (event.url) address.value = event.url;
-        if (event.title) title.textContent = event.title;
+        if (event.title) { title.textContent = event.title; }
         if (event.reason?.includes("error")) show(event.reason);
         else if (event.reason === "navigation") show("Loading page…");
         else if (event.reason === "loaded") show("Page loaded. Snapshot or adjust text using the controls above.");
