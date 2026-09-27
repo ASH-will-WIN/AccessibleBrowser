@@ -1,0 +1,11 @@
+{
+  "requestId": "req_snapshot_failure_001",
+  "planId": "plan_snapshot_failure_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "status": "failed",
+  "errorCode": "SNAPSHOT_FAILED",
+  "message": "The page snapshot could not be created.",
+  "retryable": true,
+  "changedState": false
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "planId": "plan_rejected_001",
+  "requestId": "req_demo_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "status": "rejected",
+  "errorCode": "INVALID_PLAN",
+  "message": "The proposed change could not be validated as an allowlisted accessibility plan.",
+  "explanation": "The request needs a new plan using supported, reversible actions.",
+  "actions": [],
+  "warnings": [],
+  "retryable": false
+}

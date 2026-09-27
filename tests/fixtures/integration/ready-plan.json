@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "planId": "plan_demo_001",
+  "requestId": "req_demo_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "summary": "Increase reading size and make the primary controls easier to activate.",
+  "actions": [
+    {
+      "actionId": "action_scale_text",
+      "type": "set_text_scale",
+      "parameters": { "scale": 1.25 },
+      "reason": "Larger text makes the article easier to read.",
+      "reversible": true
+    },
+    {
+      "actionId": "action_spacing",
+      "type": "set_spacing",
+      "parameters": { "spacing": "comfortable" },
+      "reason": "Additional spacing separates lines and controls.",
+      "reversible": true
+    },
+    {
+      "actionId": "action_targets",
+      "type": "enlarge_targets",
+      "parameters": { "enabled": true },
+      "targetElementIds": ["el_button_1", "el_link_1"],
+      "reason": "Larger targets make the primary controls easier to click.",
+      "reversible": true
+    }
+  ],
+  "confidence": "high",
+  "warnings": [],
+  "suggestedScope": "website",
+  "status": "ready"
+}

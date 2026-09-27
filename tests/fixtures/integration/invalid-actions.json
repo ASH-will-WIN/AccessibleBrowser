@@ -1,0 +1,202 @@
+[
+  {
+    "caseId": "unknown-action-kind",
+    "expectedErrorCode": "UNSUPPORTED_ACTION",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_unknown",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsupported action",
+      "actions": [
+        {
+          "actionId": "action_unknown",
+          "type": "run_custom_transform",
+          "parameters": {},
+          "reason": "This action is not in the allowlist.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "missing-required-parameter",
+    "expectedErrorCode": "INVALID_PARAMETERS",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_missing",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Missing scale",
+      "actions": [
+        {
+          "actionId": "action_missing_scale",
+          "type": "set_text_scale",
+          "parameters": {},
+          "reason": "The required scale is absent.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "invalid-numeric-parameter",
+    "expectedErrorCode": "INVALID_PARAMETERS",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_number",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Invalid scale",
+      "actions": [
+        {
+          "actionId": "action_bad_scale",
+          "type": "set_text_scale",
+          "parameters": { "scale": 9 },
+          "reason": "The scale is outside the bounded range.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "arbitrary-javascript",
+    "expectedErrorCode": "INVALID_PLAN",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_js",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsafe payload",
+      "actions": [
+        {
+          "actionId": "action_js",
+          "type": "set_text_scale",
+          "parameters": { "scale": 1.25, "javascript": "document.body.innerHTML = 'x'" },
+          "reason": "This payload must never execute.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "arbitrary-css",
+    "expectedErrorCode": "INVALID_PLAN",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_css",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsafe payload",
+      "actions": [
+        {
+          "actionId": "action_css",
+          "type": "set_contrast",
+          "parameters": { "level": "high", "css": "* { display: none }" },
+          "reason": "Arbitrary CSS must be rejected.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "shell-command-payload",
+    "expectedErrorCode": "INVALID_PLAN",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_shell",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsafe payload",
+      "actions": [
+        {
+          "actionId": "action_shell",
+          "type": "reading_mode",
+          "parameters": { "enabled": true, "shellCommand": "curl https://example.test" },
+          "reason": "Shell commands are outside the browser action contract.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "raw-selector-payload",
+    "expectedErrorCode": "INVALID_PLAN",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_selector",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsafe payload",
+      "actions": [
+        {
+          "actionId": "action_selector",
+          "type": "hide_regions",
+          "parameters": { "selector": ".advertisement" },
+          "reason": "Raw selectors are not part of the action contract.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "unbounded-browser-operation",
+    "expectedErrorCode": "INVALID_PLAN",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_browser",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unsafe payload",
+      "actions": [
+        {
+          "actionId": "action_browser",
+          "type": "reading_mode",
+          "parameters": { "enabled": true, "browserOperation": "navigateEverywhere" },
+          "reason": "Unbounded browser operations are forbidden.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  }
+]
