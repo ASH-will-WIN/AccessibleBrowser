@@ -230,7 +230,7 @@ async function getPageSnapshot() {
       const role = el.getAttribute("role") || ({ H1:"heading",H2:"heading",H3:"heading",H4:"heading",H5:"heading",H6:"heading",BUTTON:"button",A:"link",INPUT:inputRole,TEXTAREA:"textbox",SELECT:"combobox",MAIN:"main",ARTICLE:"article",SECTION:"region" }[el.tagName] || "generic");
       const name = clean(el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("placeholder") || el.innerText);
       const tag = el.tagName.toLowerCase();
-      return { id, role, accessibleName: name, text: clean(el.innerText, 300), visible: true,
+      return { elementId: id, role, accessibleName: name, text: clean(el.innerText, 300), visible: true,
         disabled: Boolean(el.disabled || el.getAttribute("aria-disabled") === "true"),
         bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
         metadata: { tag, inputType: tag === "input" ? inputType : undefined, fontSize: getComputedStyle(el).fontSize } };
@@ -257,7 +257,7 @@ async function getPageSnapshot() {
       viewport: { width: innerWidth, height: innerHeight }, scroll: { x: scrollX, y: scrollY },
       elements, headings, sections, contentSummary: summary };
   })()`);
-  tab.elementIds = new Map(raw.elements.map((element) => [element.id, tab.pageRevision]));
+  tab.elementIds = new Map(raw.elements.map((element) => [element.elementId, tab.pageRevision]));
   return {
     schemaVersion: 1, snapshotId, tabId: tab.id, pageRevision: tab.pageRevision,
     url: redactUrl(raw.url), origin: raw.origin, title: raw.title, viewport: raw.viewport, scroll: raw.scroll,
@@ -364,7 +364,18 @@ register("apply-adaptation-plan", async (plan) => {
         case "focus_elements": {
           const focusToken = makeId("focus");
           const safeIds = JSON.stringify(ids);
-          await executePageScript(tab, `(() => { const ids=${safeIds}; const active=document.activeElement; const x=scrollX,y=scrollY; const target=document.querySelector('[data-ab-element-id="'+ids[0]+'"]'); if(!target) throw new Error("Target not found"); window.__abFocusUndo=window.__abFocusUndo||{}; window.__abFocusUndo[${JSON.stringify(focusToken)}]={prior:active,x,y}; target.focus?.({preventScroll:true}); return true; })()`);
+          await executePageScript(tab, `(() => {
+            const ids=${safeIds};
+            const target=document.querySelector('[data-ab-element-id="'+ids[0]+'"]');
+            if(!target) throw new Error("Target not found");
+            const prior=document.activeElement;
+            const x=scrollX,y=scrollY;
+            target.focus?.({preventScroll:true});
+            if(document.activeElement!==target) throw new Error("Target cannot receive keyboard focus");
+            window.__abFocusUndo=window.__abFocusUndo||{};
+            window.__abFocusUndo[${JSON.stringify(focusToken)}]={prior,x,y};
+            return true;
+          })()`);
           applied.push({ type: action.type, focusToken });
           continue;
         }

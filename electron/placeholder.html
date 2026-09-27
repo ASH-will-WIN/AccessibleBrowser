@@ -130,6 +130,7 @@
         if (event.url) address.value = event.url;
         if (event.title) title.textContent = event.title;
         if (event.reason?.includes("error")) show(event.reason);
+        else if (event.reason === "navigation") show("Loading page…");
         else if (event.reason === "loaded") show("Page loaded. Snapshot or adjust text using the controls above.");
         updateShellState();
       });
