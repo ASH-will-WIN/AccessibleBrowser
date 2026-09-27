@@ -8,16 +8,16 @@ The implementation target is `integration`; `main` remains stable and intentiona
 | --- | --- | --- | --- | --- | --- |
 | W0 | Orchestrator + audit worker | `docs/INTEGRATION_AUDIT.md`, ledger | none | working | Baseline refs fetched; full feature matrix must distinguish live code, fixtures, and adapters. |
 | W1 | Contract worker | `CONTRACTS.md`, Jac/Electron contract surfaces, focused tests | W0 evidence | partial | Shared schemas and stale/error behavior exist in several layers; compare exact field names and required fields. |
-| W2 | Electron worker | `electron/**`, Electron fixtures/tests | W1 decisions | partial | `electron/main.js` has snapshot, allowlist, apply, rollback, undo symbols; prove real-page behavior and bridge wiring. |
-| W3 | Jac worker | `jac/**`, Jac tests | W1 decisions | partial/implemented | `jac/core.jac`, provider, persistence, service, API, and tests exist; verify all are executable and used by live path. |
-| W4 | UI worker | `frontend.jac`, `main.jac`, UI modules | W3 surface | partial/stubbed | `frontend.jac` contains a typed adapter and UI states; identify remaining development-adapter use and connect real APIs. |
-| W5 | Test worker | `tests/**`, test scripts/docs | W1-W4 merges | partial | Fixture contract runner covers many failure cases but explicitly says live Electron/Jac/UI integration is not run. |
-| W6 | Demo/spec worker | demo fixture/spec docs | none | unknown/partial | No dedicated demo file was found in the initial file inventory; inspect existing fixtures and add only deterministic, contract-matching assets. |
-| W7 | Docs/Graphify worker | `README.md`, runbook/docs, Graphify output | after code merges | partial | README/docs exist; Graphify output is absent and must be refreshed only after final integration. |
+| W2 | Electron worker | `electron/**`, Electron fixtures/tests | W1 decisions | implemented, smoke-verified | Snapshot, allowlist, apply, rollback, undo, and browser-command validation merged; native shell proved snapshot → text-scale apply → undo. |
+| W3 | Jac worker | `jac/**`, Jac tests | W1 decisions | implemented, unit-verified | Request/plan/revision validation, provider fallback, preference precedence, persistence approval, and bounded records merged; provider network mocking remains open. |
+| W4 | UI worker | `frontend.jac`, `main.jac`, UI modules | W3 surface | implemented, runtime-unverified | Natural-language/deterministic requests use Jac/Electron; preview, apply, undo, stale/rejected/unavailable, explicit save, and voice-unavailable states are wired. |
+| W5 | Test worker | `tests/**`, test scripts/docs | W1-W4 merges | implemented, fixture-verified | Failure matrix now has 27 passing fixture cases; native live integration remains a separate verification gate. |
+| W6 | Demo/spec worker | `demo/**`, deterministic spec | none | implemented, static-verified | Added a repeatable local page, built-in demo server, and contract-matching action specification. |
+| W7 | Docs/Graphify worker | `README.md`, runbook/docs, Graphify output | after code merges | in progress | README/runbook updated; Graphify must be refreshed against the final integrated tree before completion. |
 
 ## Verification snapshot
 
-Static/Jac/fixture gates are green: Jac check exit 0, 11 Jac tests passed, 20 fixture contract tests passed, JavaScript syntax checks passed, and `git diff --check` passed. The native Electron shell smoke also passed snapshot → text-scale apply → undo on `example.com`. The separate Jac experience window and UI-driven live plan path remain unverified; do not mark the vertical slice complete until that gap is closed.
+Static/Jac/fixture gates are green: Jac check exit 0, 11 Jac tests passed, 27 fixture contract tests passed, JavaScript syntax checks passed, and `git diff --check` passed. The native Electron shell smoke passed snapshot → text-scale apply → undo on `example.com`. The separate Jac experience window and UI-driven live plan/save path remain unverified; do not mark the vertical slice complete until that gap is closed.
 
 ## Baseline constraints
 

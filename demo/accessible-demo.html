@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AccessibleBrowser deterministic demo</title>
+    <style>
+      :root { font-size: 14px; color: #5b5b5b; background: #f4f1e8; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Georgia, serif; line-height: 1.15; letter-spacing: -0.01em; }
+      header { padding: 10px 14px; background: #ded7c4; }
+      .layout { display: grid; grid-template-columns: 1fr 190px; gap: 10px; max-width: 900px; margin: 0 auto; padding: 14px; }
+      main, aside { background: #ebe6d8; border: 1px solid #c7c0af; padding: 12px; }
+      h1 { margin: 0 0 8px; font-size: 1.45rem; }
+      h2 { margin: 12px 0 4px; font-size: 1.12rem; }
+      p { margin: 4px 0 8px; }
+      .controls { display: flex; flex-wrap: wrap; gap: 4px; }
+      button, input { min-height: 25px; padding: 3px 6px; font: inherit; font-size: 0.8rem; }
+      button { color: #56504a; background: #d4c7a9; border: 1px solid #a99d84; }
+      a { color: #665a88; }
+      .notice { animation: drift 2.2s ease-in-out infinite alternate; padding: 5px; background: #e3d6b9; }
+      .popup { margin-top: 12px; padding: 7px; border: 1px dashed #a79c8a; background: #e0d8c8; }
+      @keyframes drift { from { transform: translateX(0); } to { transform: translateX(3px); } }
+      @media (max-width: 650px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>AccessibleBrowser demo</strong>
+      <nav aria-label="Primary navigation"><a href="#article">Article</a> · <a href="#controls">Controls</a> · <a href="#form">Form</a></nav>
+    </header>
+    <div class="layout">
+      <main id="article">
+        <h1>A small page with intentional accessibility problems</h1>
+        <p class="notice" role="status">This notice moves slightly so reduced-motion behavior is visible.</p>
+        <p>The text is deliberately small and tightly spaced. The contrast is intentionally gentle, while the article still contains enough structure to exercise a bounded snapshot.</p>
+        <h2>Why use a deterministic fixture?</h2>
+        <p>A local page makes visual changes, focus outlines, reading mode, and undo behavior repeatable without depending on an external site.</p>
+        <h2 id="controls">Controls</h2>
+        <div class="controls">
+          <button type="button">Small action</button>
+          <button type="button">Another action</button>
+          <a href="#form">Jump to form</a>
+        </div>
+        <h2 id="form">Feedback form</h2>
+        <form>
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" placeholder="Your name">
+          <button type="submit">Send</button>
+        </form>
+      </main>
+      <aside aria-label="Distracting sidebar">
+        <h2>Sidebar</h2>
+        <p>Extra links and a simulated popup provide content that reading mode can de-emphasize.</p>
+        <div class="popup" role="dialog" aria-label="Demo reminder">Reminder: this box is part of the fixture.</div>
+      </aside>
+    </div>
+  </body>
+</html>

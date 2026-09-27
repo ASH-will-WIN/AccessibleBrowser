@@ -22,10 +22,10 @@ This audit starts from `origin/integration` at `8ca941b`, fetched on 2026-09-27.
 | UI first screen | partial | `frontend.jac` defines `app` and controls | Verify it is the active UI and does not rely on a fixture for production path. |
 | UI request/preview/apply/undo/save | partial/stubbed | `frontend.jac` has adapter methods and state fields; integration fixtures model the sequence | Trace each action to Jac API and preload; replace dev adapter in real path. |
 | Voice unavailable state | implemented, unverified | UI/fixture symbols and `voice-unavailable.json` are present | Verify truthfully visible state in running UI. |
-| Demo webpage | unknown | No dedicated demo file appeared in initial file listing; placeholder and test fixtures exist | Inspect branches/files and add minimal fixture if missing. |
-| Integration tests | partial | `tests/integration/run-contract-tests.js` covers many fixture cases; README explicitly says live integration is not run | Add/run live vertical-slice coverage without secrets. |
-| Documentation/runbook | partial | README, architecture, contracts, decisions, test README exist | Update only after verified implementation. |
-| Graphify evidence | missing | `graphify-out/graph.json` was absent at baseline | Refresh final integrated tree and query Jac→Electron relationships. |
+| Demo webpage | implemented, statically verified | `demo/accessible-demo.html`, `scripts/demo-server.js`, and deterministic action spec | Native Electron run against the local fixture remains part of live verification. |
+| Integration tests | partial but hardened | `tests/integration/run-contract-tests.js` covers 27 fixture cases; README explicitly says live integration is not run | Run the native vertical slice without secrets. |
+| Documentation/runbook | implemented | README, architecture, contracts, decisions, test README, action spec, and runbook match the current implementation | Reconcile any runtime findings after native verification. |
+| Graphify evidence | refreshed | `graphify-out/graph.json` was updated after W1-W6 integration and queried for Jac→Electron flow | Keep generated artifacts aligned with final code changes. |
 
 ## Initial risks
 
@@ -39,7 +39,7 @@ This audit starts from `origin/integration` at `8ca941b`, fetched on 2026-09-27.
 
 - `npm run jac:check`: passed (exit 0; Jac emitted existing `any`/intrinsic/undefined-name warnings).
 - `env -u OPENAI_API_KEY -u OPENAI_MODEL node scripts/jac.js test jac/core_test.jac -v`: 11 passed.
-- `node tests/integration/run-contract-tests.js`: 20 fixture contract cases passed; the harness explicitly reports live Electron/Jac/UI integration as not run.
+- `node tests/integration/run-contract-tests.js`: 27 fixture contract cases passed; the harness explicitly reports live Electron/Jac/UI integration as not run.
 - `node --check` passed for Electron and integration-test JavaScript.
 - `git diff --check`: passed.
 - Secrets scan found only the tracked `.env.example`, with empty values.
@@ -47,23 +47,23 @@ This audit starts from `origin/integration` at `8ca941b`, fetched on 2026-09-27.
 - Native Electron shell smoke passed on `example.com`: bridge ping was visible, snapshot returned a revision and bounded visible elements, the development text-scale plan changed the live page, and undo restored it.
 - The separate Jac experience window was not counted as fully verified because the host exposed a stale/blank `chrome-error://chromewebdata/` window during native window switching; the shell and Jac RPC endpoint were healthy. This remains a release-blocking live-path verification gap, not a fixture success.
 
-## Current classification
+## Current classification (after W1-W6 integration)
 
 ### Implemented and verified
 
-Jac checks and deterministic tests, fixture failure matrix, secure Electron shell startup, bounded snapshot, allowlisted text-scale apply, transactional undo behavior, and the corrected dynamic Jac UI/API launcher path.
+Jac checks and deterministic tests, the 27-case fixture failure matrix, secure Electron shell startup, bounded snapshot, allowlisted text-scale apply, transactional undo behavior, Jac request/plan/persistence hardening, canonical UI wiring, the deterministic local demo fixture, and the corrected dynamic Jac UI/API launcher path.
 
 ### Implemented but not fully verified
 
-Full Jac experience window rendering, UI-driven Jac plan preview/apply/save path, all Electron action handlers beyond the text-scale smoke, graph-backed persistence through the running UI, and live stale/invalid-plan interaction.
+Full Jac experience window rendering, UI-driven Jac plan preview/apply/save path, all Electron action handlers beyond the text-scale smoke, graph-backed persistence through the running UI, and live stale/invalid-plan interaction. The Jac provider network boundary is unit-guarded but not integration-tested with a mock server.
 
 ### Stubbed or demo-only
 
-The placeholder shell's `Text +25% (development fixture)` control; `read_page`/voice provider behavior; fixture adapter tests; any actions not proven in the native smoke.
+The placeholder shell's `Text +25% (development fixture)` control; `read_page`/voice provider behavior; fixture adapter tests as runtime substitutes; any actions not proven in the native smoke.
 
 ### Blocked by external work
 
-Native experience-window verification is currently blocked by the host's multiple/stale Electron window state; Jac requires host filesystem permissions for its embedded Postgres/cache during `npm run dev`.
+Native experience-window verification is currently blocked by the host's multiple/stale Electron window state; Jac requires host filesystem permissions for its embedded Postgres/cache during `npm run dev`. No repository or architecture blocker remains.
 
 ### Intentionally deferred
 

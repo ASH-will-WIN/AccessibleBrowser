@@ -1,31 +1,31 @@
 {
   "electron/main.js": {
-    "mtime": 1790482146.4205048,
-    "seen": 1790482939.558764,
-    "ast_hash": "63a81cd5c88650a8ae26034fa1c9d38d",
+    "mtime": 1790514938.2224607,
+    "seen": 1790515265.905463,
+    "ast_hash": "57d177b11bbca044bfd403d12c5b0681",
     "semantic_hash": ""
   },
   "electron/preload.js": {
-    "mtime": 1790481766.5185242,
-    "seen": 1790482939.5587652,
-    "ast_hash": "528dca31d031e59fe75062789000b0fd",
+    "mtime": 1790514938.2226458,
+    "seen": 1790515265.9054651,
+    "ast_hash": "fd4378ab2125e694270a38e134e117c7",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790481766.519802,
-    "seen": 1790482939.5587652,
-    "ast_hash": "5cf2c376d7b53b4c0f19fe9e45e5c94a",
+    "mtime": 1790515190.6672394,
+    "seen": 1790515265.9054651,
+    "ast_hash": "23f1592d1b44010b2b17bea6c7534dd8",
     "semantic_hash": ""
   },
   "scripts/dev.js": {
-    "mtime": 1790481728.3702457,
-    "seen": 1790482939.5587661,
-    "ast_hash": "b46b223afa1edcf2b87df38b53bce46e",
+    "mtime": 1790514638.3384624,
+    "seen": 1790515265.9054668,
+    "ast_hash": "8655dbee69b4e8441a13fc73ab7b1644",
     "semantic_hash": ""
   },
   "scripts/jac.js": {
-    "mtime": 1790481728.3704617,
-    "seen": 1790482939.558767,
+    "mtime": 1790514096.2110376,
+    "seen": 1790515265.9054668,
     "ast_hash": "4bbf10cfe5a018d504523461b67b515e",
     "semantic_hash": ""
   },
@@ -36,32 +36,32 @@
     "semantic_hash": ""
   },
   "ARCHITECTURE.md": {
-    "mtime": 1790482463.737942,
-    "seen": 1790482939.558768,
-    "ast_hash": "1970c5910c35266bcffa1bb92074b9a6",
+    "mtime": 1790514500.1910632,
+    "seen": 1790515265.905477,
+    "ast_hash": "faac2d00e2ba0608434e99af40e78780",
     "semantic_hash": ""
   },
   "CONTRACTS.md": {
-    "mtime": 1790481728.3687441,
-    "seen": 1790482939.558768,
-    "ast_hash": "532bfaa872ec71bfcb5a286ed25b8723",
+    "mtime": 1790514886.6298964,
+    "seen": 1790515265.905478,
+    "ast_hash": "3a0ec1b30a66a6b1ca15e6790fb6258a",
     "semantic_hash": ""
   },
   "CONTRIBUTING.md": {
-    "mtime": 1790461872.0400488,
-    "seen": 1790482939.558769,
-    "ast_hash": "361205299a40079cfb655ec35af4c8e1",
+    "mtime": 1790514500.210111,
+    "seen": 1790515265.905479,
+    "ast_hash": "113f4fdc6cbff8d271d2a1a09b11cacb",
     "semantic_hash": ""
   },
   "DECISIONS.md": {
-    "mtime": 1790482458.416828,
-    "seen": 1790482939.558769,
-    "ast_hash": "d3b7ebf38f9f752b59a1d224ef5a263a",
+    "mtime": 1790514500.2294307,
+    "seen": 1790515265.905479,
+    "ast_hash": "74e8543183072a33f0d6c365992a7b03",
     "semantic_hash": ""
   },
   "JAC_CORE.md": {
-    "mtime": 1790481766.517998,
-    "seen": 1790482939.55877,
+    "mtime": 1790514096.2042053,
+    "seen": 1790515265.90548,
     "ast_hash": "f095c9a6289b5ce71b8d666b796be61d",
     "semantic_hash": ""
   },
@@ -72,15 +72,159 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790464251.1118407,
-    "seen": 1790482939.558771,
-    "ast_hash": "a8d10c0912abb5761b6bfb1c1920cff0",
+    "mtime": 1790515190.6849709,
+    "seen": 1790515265.9054809,
+    "ast_hash": "2c74d54dcaa0562e9f7d331a5901e2d0",
     "semantic_hash": ""
   },
   "electron/placeholder.html": {
-    "mtime": 1790481728.3696532,
-    "seen": 1790482939.558771,
+    "mtime": 1790514096.2049625,
+    "seen": 1790515265.905484,
     "ast_hash": "5ae7024f027e1fc7cd2a8a28719c3a2f",
+    "semantic_hash": ""
+  },
+  "scripts/demo-server.js": {
+    "mtime": 1790515190.6123092,
+    "seen": 1790515265.905466,
+    "ast_hash": "fb35dfbb40f9576f38f5a9febca99932",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/failed-apply.json": {
+    "mtime": 1790514096.2113612,
+    "seen": 1790515265.905468,
+    "ast_hash": "be578fb623654d9e118efac0955f8777",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/invalid-actions.json": {
+    "mtime": 1790514923.020697,
+    "seen": 1790515265.905468,
+    "ast_hash": "207cdb428c5c83dbbcea5fa6a15e3113",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/llm-unavailable.json": {
+    "mtime": 1790514096.2120166,
+    "seen": 1790515265.905469,
+    "ast_hash": "8f82bc9e89c1196aa37d6bc7349f85be",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/malformed-llm.json": {
+    "mtime": 1790514923.020803,
+    "seen": 1790515265.905469,
+    "ast_hash": "9c7ce117ef32d0f3855d3fbbc3b474eb",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/preferences.json": {
+    "mtime": 1790514096.2124085,
+    "seen": 1790515265.90547,
+    "ast_hash": "f03f1a1fcf30a007002b46ef3b9d7bbe",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/ready-plan.json": {
+    "mtime": 1790514096.2125676,
+    "seen": 1790515265.905471,
+    "ast_hash": "a305164cf7e67ed1982563e26f3ce3a6",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/rejected-plan.json": {
+    "mtime": 1790514096.212723,
+    "seen": 1790515265.905471,
+    "ast_hash": "12ae9a69269a80e64ea926fb3eb1d869",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/snapshot-failure.json": {
+    "mtime": 1790514096.2129028,
+    "seen": 1790515265.905472,
+    "ast_hash": "4c3fbf169eb266f9f17aee1437bf73db",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/stale-plan.json": {
+    "mtime": 1790514096.213132,
+    "seen": 1790515265.905473,
+    "ast_hash": "49dabc8eea5da24e994753ca7a1a03a3",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/stale-request.json": {
+    "mtime": 1790514096.2133625,
+    "seen": 1790515265.905473,
+    "ast_hash": "2037ad07482ff988eb743b485ef95b52",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/valid-adaptation-request.json": {
+    "mtime": 1790514096.21361,
+    "seen": 1790515265.905474,
+    "ast_hash": "757708b782e2ab5067d8796a2106023f",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/valid-page-snapshot.json": {
+    "mtime": 1790514096.2138479,
+    "seen": 1790515265.905474,
+    "ast_hash": "cb58ab166efb29dee710b6a9bc47e1fd",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/integration/voice-unavailable.json": {
+    "mtime": 1790514096.2140427,
+    "seen": 1790515265.9054751,
+    "ast_hash": "f7d34c88547108fb68cc2ec9c5cd3c42",
+    "semantic_hash": ""
+  },
+  "tests/integration/run-contract-tests.js": {
+    "mtime": 1790514923.0211046,
+    "seen": 1790515265.9054751,
+    "ast_hash": "c2b3f6ac1f956638838392a7c48665b4",
+    "semantic_hash": ""
+  },
+  "tests/integration/test-adapter.js": {
+    "mtime": 1790514923.0212808,
+    "seen": 1790515265.905476,
+    "ast_hash": "8674dd9bdd8cf73d0a2e5bcf78f8d87b",
+    "semantic_hash": ""
+  },
+  "PARALLEL_EXECUTION_PLAN.md": {
+    "mtime": 1790513648.405249,
+    "seen": 1790515265.90548,
+    "ast_hash": "38c3ddc948d2de7de9629da680a93ae3",
+    "semantic_hash": ""
+  },
+  "demo/accessible-demo.html": {
+    "mtime": 1790515190.5926178,
+    "seen": 1790515265.905482,
+    "ast_hash": "cbf259d949b57b1171cc00038625c5ce",
+    "semantic_hash": ""
+  },
+  "docs/DETERMINISTIC_ACTION_SPEC.md": {
+    "mtime": 1790515190.6309443,
+    "seen": 1790515265.905482,
+    "ast_hash": "aa51bb26aad2417bd5a46993ca952793",
+    "semantic_hash": ""
+  },
+  "docs/INTEGRATION_AUDIT.md": {
+    "mtime": 1790515209.6061976,
+    "seen": 1790515265.905483,
+    "ast_hash": "ae660084ffe57f1a85e1edde83a92aaa",
+    "semantic_hash": ""
+  },
+  "docs/INTEGRATION_TASK_LEDGER.md": {
+    "mtime": 1790515209.582284,
+    "seen": 1790515265.905483,
+    "ast_hash": "cc5902d974f474c9965eae59a9e280a2",
+    "semantic_hash": ""
+  },
+  "docs/VERTICAL_SLICE_RUNBOOK.md": {
+    "mtime": 1790515190.6487558,
+    "seen": 1790515265.905484,
+    "ast_hash": "f8f2d198064ecaf8777c05ead4cdec72",
+    "semantic_hash": ""
+  },
+  "tests/integration/README.md": {
+    "mtime": 1790514923.0209703,
+    "seen": 1790515265.9054852,
+    "ast_hash": "510fa3f81654fbdab4aa370d6e860529",
+    "semantic_hash": ""
+  },
+  "tests/integration/cases.md": {
+    "mtime": 1790514096.2146409,
+    "seen": 1790515265.9054852,
+    "ast_hash": "6bc85ddfccfd45cbc1c87d13aac98cec",
     "semantic_hash": ""
   }
 }
