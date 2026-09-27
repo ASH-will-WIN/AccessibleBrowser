@@ -5,14 +5,8 @@ build/
 .env
 .env.*
 !.env.example
-# Keep the reviewed Graphify artifacts in Git; leave extraction caches and
-# machine-specific sidecars ignored.
-graphify-out/*
-!graphify-out/GRAPH_REPORT.md
-!graphify-out/graph.html
-!graphify-out/graph.json
-!graphify-out/manifest.json
-graphify-out/cache/
+# Graphify output is generated locally and is not source code.
+graphify-out/
 .DS_Store
 *.log
 coverage/
