@@ -9,6 +9,31 @@ const TOOLBAR_HEIGHT = 150;
 const MAX_TEXT = 12_000;
 const MAX_ELEMENTS = 160;
 const PAGE_WORLD_ID = 1001;
+const ACTION_KINDS = new Set([
+  "set_text_scale",
+  "set_spacing",
+  "set_contrast",
+  "set_color_filter",
+  "reduce_motion",
+  "enlarge_targets",
+  "hide_regions",
+  "reading_mode",
+  "focus_elements",
+]);
+const BROWSER_COMMAND_KINDS = new Set([
+  "new_tab",
+  "close_tab",
+  "switch_tab",
+  "back",
+  "forward",
+  "reload",
+  "navigate",
+  "scroll",
+  "zoom",
+  "search",
+  "read_page",
+  "stop_reading",
+]);
 const tabs = new Map();
 let window;
 let experienceWindow;
@@ -52,7 +77,7 @@ function executePageScript(tab, code) {
 }
 
 function structuredError(error, requestId = makeId("request")) {
-  const allowed = new Set(["INVALID_MESSAGE", "UNSUPPORTED_VERSION", "STALE_PAGE_REVISION", "TARGET_NOT_FOUND", "INVALID_PLAN", "UNSUPPORTED_ACTION", "INVALID_PARAMETERS", "APPLY_FAILED", "UNDO_FAILED", "LLM_UNAVAILABLE", "TIMEOUT", "PERMISSION_DENIED", "USER_CANCELLED", "JAC_UNAVAILABLE"]);
+  const allowed = new Set(["INVALID_MESSAGE", "UNSUPPORTED_VERSION", "STALE_PAGE_REVISION", "TARGET_NOT_FOUND", "INVALID_PLAN", "UNSUPPORTED_ACTION", "INVALID_PARAMETERS", "APPLY_FAILED", "UNDO_FAILED", "SNAPSHOT_FAILED", "LLM_UNAVAILABLE", "TIMEOUT", "PERMISSION_DENIED", "USER_CANCELLED", "JAC_UNAVAILABLE"]);
   const code = allowed.has(error.code) ? error.code : "INVALID_MESSAGE";
   const detail = { schemaVersion: 1, requestId, code, message: error.message || "Request failed", retryable: error.retryable === true || code === "TIMEOUT" };
   return { status: "rejected", requestId, error: detail };
@@ -152,6 +177,65 @@ function safeUrl(raw) {
   return parsed.toString();
 }
 
+function commandError(code, message, retryable = false) {
+  return Object.assign(new Error(message), { code, retryable });
+}
+
+function validateBrowserCommand(command) {
+  requireKeys(command, ["schemaVersion", "requestId", "tabId", "kind", "arguments", "requiresConfirmation"]);
+  if (command.schemaVersion !== 1) throw commandError("UNSUPPORTED_VERSION", "Unsupported browser command version.");
+  if (typeof command.requestId !== "string" || command.requestId.length < 1 || command.requestId.length > 120 || typeof command.tabId !== "string" || typeof command.kind !== "string" || !validObject(command.arguments) || typeof command.requiresConfirmation !== "boolean") {
+    throw commandError("INVALID_MESSAGE", "Invalid browser command envelope.");
+  }
+  if (!BROWSER_COMMAND_KINDS.has(command.kind)) throw commandError("UNSUPPORTED_ACTION", "Unsupported browser command.");
+
+  const args = command.arguments;
+  switch (command.kind) {
+    case "new_tab":
+      requireKeys(args, [], ["url"]);
+      if (args.url !== undefined) safeUrl(args.url);
+      break;
+    case "close_tab":
+    case "back":
+    case "forward":
+    case "reload":
+    case "read_page":
+    case "stop_reading":
+      requireKeys(args, []);
+      break;
+    case "switch_tab":
+      requireKeys(args, ["tabId"]);
+      if (typeof args.tabId !== "string" || !args.tabId) throw commandError("INVALID_PARAMETERS", "A tabId is required to switch tabs.");
+      break;
+    case "navigate":
+      requireKeys(args, ["url"]);
+      safeUrl(args.url);
+      break;
+    case "scroll":
+      requireKeys(args, ["deltaY"], ["deltaX"]);
+      if (!Number.isFinite(args.deltaY) || Math.abs(args.deltaY) > 2000 || (args.deltaX !== undefined && (!Number.isFinite(args.deltaX) || Math.abs(args.deltaX) > 1000))) {
+        throw commandError("INVALID_PARAMETERS", "Scroll distance is out of bounds.");
+      }
+      break;
+    case "zoom":
+      requireKeys(args, ["factor"]);
+      if (!Number.isFinite(args.factor) || args.factor < 0.5 || args.factor > 2.5) throw commandError("INVALID_PARAMETERS", "Zoom factor must be between 0.5 and 2.5.");
+      break;
+    case "search":
+      requireKeys(args, ["searchType"], ["query", "elementId"]);
+      if (args.searchType === "focus_field") {
+        requireKeys(args, ["searchType", "elementId"]);
+        if (typeof args.elementId !== "string" || !args.elementId) throw commandError("INVALID_PARAMETERS", "A search field elementId is required.");
+      } else {
+        requireKeys(args, ["searchType", "query"]);
+        if (!["web", "page"].includes(args.searchType) || typeof args.query !== "string" || args.query.length > 300 || !args.query.trim()) throw commandError("INVALID_PARAMETERS", "Search requires web or page and 1 to 300 characters of text.");
+      }
+      break;
+  }
+  if (command.kind === "close_tab" && !command.requiresConfirmation) return { cancelled: true };
+  return { cancelled: false };
+}
+
 function redactUrl(raw) {
   try {
     const parsed = new URL(raw);
@@ -186,6 +270,7 @@ function createTab(url = DEFAULT_URL) {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      webviewTag: false,
     },
   });
   const tab = { id, view, pageRevision: 0, elementIds: new Map(), lastMutationVersion: undefined, lastUndoToken: undefined };
@@ -195,6 +280,7 @@ function createTab(url = DEFAULT_URL) {
     try { void navigate(tab, target).catch(() => {}); } catch { /* unsafe popups are discarded */ }
     return { action: "deny" };
   });
+  view.webContents.on("will-attach-webview", (event) => event.preventDefault());
   view.webContents.on("will-navigate", (event, target) => {
     try { safeUrl(target); } catch { event.preventDefault(); }
   });
@@ -228,6 +314,7 @@ async function navigate(tab, rawUrl) {
 
 async function pageState(tab) {
   const state = await executePageScript(tab, `(() => {
+    if (!document.documentElement) throw new Error("The page is not ready for inspection.");
     const key = "__accessibleBrowserMutationVersion";
     const observerKey = key + "Observer";
     if (!Number.isInteger(window[key])) {
@@ -242,6 +329,7 @@ async function pageState(tab) {
     if (pending.length) window[key] += 1;
     return { mutationVersion: window[key], url: location.href };
   })()`);
+  if (!state || !Number.isInteger(state.mutationVersion)) throw Object.assign(new Error("The page state could not be read."), { code: "SNAPSHOT_FAILED", retryable: true });
   if (tab.lastMutationVersion !== undefined && state.mutationVersion !== tab.lastMutationVersion) bumpRevision(tab, "page-changed");
   tab.lastMutationVersion = state.mutationVersion;
   return state;
@@ -250,9 +338,17 @@ async function pageState(tab) {
 async function getPageSnapshot() {
   const tab = getActiveTab();
   if (!tab) throw new Error("No active page");
-  await pageState(tab);
+  try {
+    await pageState(tab);
+  } catch (error) {
+    if (!error.code) error.code = "SNAPSHOT_FAILED";
+    throw error;
+  }
   const snapshotId = makeId("snapshot");
-  const raw = await executePageScript(tab, `(() => {
+  let raw;
+  try {
+    raw = await executePageScript(tab, `(() => {
+    if (!document.body) throw new Error("The page has no document body yet.");
     const max = ${MAX_ELEMENTS};
     const maxScan = 2500;
     const visible = (el) => {
@@ -285,7 +381,7 @@ async function getPageSnapshot() {
       const role = el.getAttribute("role") || ({ H1:"heading",H2:"heading",H3:"heading",H4:"heading",H5:"heading",H6:"heading",BUTTON:"button",A:"link",INPUT:inputRole,TEXTAREA:"textbox",SELECT:"combobox",MAIN:"main",ARTICLE:"article",SECTION:"region" }[el.tagName] || "generic");
       const name = clean(el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("placeholder") || el.innerText);
       const tag = el.tagName.toLowerCase();
-      return { elementId: id, role, accessibleName: name, text: clean(el.innerText, 300), visible: true,
+      return { elementId: id, role, accessibleName: name, visibleText: clean(el.innerText, 300), visibility: "visible",
         disabled: Boolean(el.disabled || el.getAttribute("aria-disabled") === "true"),
         bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
         metadata: { tag, inputType: tag === "input" ? inputType : undefined, fontSize: getComputedStyle(el).fontSize } };
@@ -307,59 +403,68 @@ async function getPageSnapshot() {
       const part = textNode.nodeValue.slice(0, ${MAX_TEXT} - textLength + 256).trim();
       if (part) { const clipped = part.slice(0, ${MAX_TEXT} - textLength); textParts.push(clipped); textLength += clipped.length; }
     }
+    const crossOriginIframes = [...document.querySelectorAll("iframe")].some((frame) => {
+      try { return new URL(frame.src || "", location.href).origin !== location.origin; } catch { return true; }
+    });
     const summary = clean(textParts.join(" "), ${MAX_TEXT});
     return { url: location.href, origin: location.origin, title: clean(document.title, 500),
       viewport: { width: innerWidth, height: innerHeight }, scroll: { x: scrollX, y: scrollY },
-      elements, headings, sections, contentSummary: summary };
+      elements, headings, sections, contentSummary: summary, crossOriginIframes };
   })()`);
+  } catch (error) {
+    if (!error.code) error.code = "SNAPSHOT_FAILED";
+    throw error;
+  }
+  if (!validObject(raw) || !Array.isArray(raw.elements) || !Array.isArray(raw.sections) || !Array.isArray(raw.headings) || typeof raw.contentSummary !== "string" || typeof raw.crossOriginIframes !== "boolean") {
+    throw Object.assign(new Error("The page returned an invalid snapshot."), { code: "SNAPSHOT_FAILED", retryable: true });
+  }
   tab.elementIds = new Map(raw.elements.map((element) => [element.elementId, tab.pageRevision]));
   return {
     schemaVersion: 1, snapshotId, tabId: tab.id, pageRevision: tab.pageRevision,
     url: redactUrl(raw.url), origin: raw.origin, title: raw.title, viewport: raw.viewport, scroll: raw.scroll,
     elements: raw.elements, sections: raw.sections, contentSummary: raw.contentSummary,
-    headings: raw.headings, pageMetadata: { loading: tab.view.webContents.isLoading() },
+    headings: raw.headings, pageMetadata: { loading: tab.view.webContents.isLoading(), crossOriginIframes: raw.crossOriginIframes },
   };
 }
 
 function validatePlan(plan) {
   requireKeys(plan, ["schemaVersion", "planId", "requestId", "tabId", "pageRevision", "summary", "actions", "confidence", "warnings", "suggestedScope", "status"]);
-  if (plan.schemaVersion !== 1 || typeof plan.planId !== "string" || typeof plan.requestId !== "string" || typeof plan.tabId !== "string" || !Number.isInteger(plan.pageRevision) || !Array.isArray(plan.actions) || plan.actions.length < 1 || plan.actions.length > 20 || typeof plan.summary !== "string" || plan.summary.length > 1000 || !["high", "medium", "low"].includes(plan.confidence) || !Array.isArray(plan.warnings) || plan.warnings.length > 30 || !plan.warnings.every((warning) => typeof warning === "string" && warning.length <= 500) || !["page", "website", "global", "none"].includes(plan.suggestedScope) || plan.status !== "ready") throw new Error("Invalid adaptation plan envelope");
+  if (plan.schemaVersion !== 1 || typeof plan.planId !== "string" || !plan.planId || typeof plan.requestId !== "string" || !plan.requestId || typeof plan.tabId !== "string" || !plan.tabId || !Number.isInteger(plan.pageRevision) || !Array.isArray(plan.actions) || plan.actions.length < 1 || plan.actions.length > 20 || typeof plan.summary !== "string" || plan.summary.length > 1000 || !["high", "medium", "low"].includes(plan.confidence) || !Array.isArray(plan.warnings) || plan.warnings.length > 30 || !plan.warnings.every((warning) => typeof warning === "string" && warning.length <= 500) || !["page", "website", "global", "none"].includes(plan.suggestedScope) || plan.status !== "ready") throw commandError("INVALID_PLAN", "Invalid adaptation plan envelope.");
   const tab = tabs.get(plan.tabId);
   if (!tab || tab.id !== activeTabId || tab.pageRevision !== plan.pageRevision) throw Object.assign(new Error("Plan targets a stale page revision"), { code: "STALE_PAGE_REVISION" });
-  const knownKinds = new Set(["set_text_scale", "set_spacing", "set_contrast", "set_color_filter", "reduce_motion", "enlarge_targets", "hide_regions", "reading_mode", "focus_elements"]);
   for (const action of plan.actions) {
     requireKeys(action, ["actionId", "type", "parameters", "reason", "reversible"], ["targetElementIds"]);
-    if (!knownKinds.has(action.type)) throw Object.assign(new Error("Unsupported adaptation action"), { code: "UNSUPPORTED_ACTION" });
-    if (!validObject(action.parameters) || typeof action.actionId !== "string" || action.actionId.length > 120 || typeof action.reason !== "string" || action.reason.length > 500 || action.reversible !== true) throw new Error("Invalid or non-reversible adaptation action");
+    if (!ACTION_KINDS.has(action.type)) throw Object.assign(new Error("Unsupported adaptation action"), { code: "UNSUPPORTED_ACTION" });
+    if (!validObject(action.parameters) || typeof action.actionId !== "string" || !action.actionId || action.actionId.length > 120 || typeof action.reason !== "string" || !action.reason || action.reason.length > 500 || action.reversible !== true) throw commandError("INVALID_PLAN", "Invalid or non-reversible adaptation action.");
     if (action.targetElementIds !== undefined && (!Array.isArray(action.targetElementIds) || action.targetElementIds.length > 100)) throw new Error("targetElementIds must be an array of at most 100 identifiers");
     const params = action.parameters;
     switch (action.type) {
       case "set_text_scale":
         requireKeys(params, ["scale"]);
-        if (!Number.isFinite(params.scale) || params.scale < 1 || params.scale > 2.5) throw new Error("Text scale must be between 1 and 2.5");
+        if (!Number.isFinite(params.scale) || params.scale < 1 || params.scale > 2.5) throw commandError("INVALID_PARAMETERS", "Text scale must be between 1 and 2.5.");
         break;
       case "set_spacing":
         requireKeys(params, [], ["lineHeight", "letterSpacing"]);
-        if (!Object.keys(params).length || (params.lineHeight !== undefined && (!Number.isFinite(params.lineHeight) || params.lineHeight < 1 || params.lineHeight > 2.5)) || (params.letterSpacing !== undefined && (!Number.isFinite(params.letterSpacing) || params.letterSpacing < 0 || params.letterSpacing > 0.2))) throw new Error("Spacing parameters are out of bounds");
+        if (!Object.keys(params).length || (params.lineHeight !== undefined && (!Number.isFinite(params.lineHeight) || params.lineHeight < 1 || params.lineHeight > 2.5)) || (params.letterSpacing !== undefined && (!Number.isFinite(params.letterSpacing) || params.letterSpacing < 0 || params.letterSpacing > 0.2))) throw commandError("INVALID_PARAMETERS", "Spacing parameters are out of bounds.");
         break;
       case "set_contrast":
         requireKeys(params, ["level"]);
-        if (!["high", "soft"].includes(params.level)) throw new Error("Contrast level must be high or soft");
+        if (!["high", "soft"].includes(params.level)) throw commandError("INVALID_PARAMETERS", "Contrast level must be high or soft.");
         break;
       case "set_color_filter":
         requireKeys(params, ["filter"]);
-        if (!["grayscale", "warm", "cool", "invert"].includes(params.filter)) throw new Error("Unsupported color filter");
+        if (!["grayscale", "warm", "cool", "invert"].includes(params.filter)) throw commandError("INVALID_PARAMETERS", "Unsupported color filter.");
         break;
       case "reduce_motion":
       case "enlarge_targets":
       case "reading_mode":
         requireKeys(params, ["enabled"]);
-        if (typeof params.enabled !== "boolean") throw new Error("enabled must be a boolean");
+        if (typeof params.enabled !== "boolean") throw commandError("INVALID_PARAMETERS", "enabled must be a boolean.");
         break;
       case "hide_regions":
       case "focus_elements":
         requireKeys(params, []);
-        if (!action.targetElementIds?.length) throw new Error(`${action.type} requires target element identifiers`);
+        if (!action.targetElementIds?.length) throw commandError("INVALID_PARAMETERS", `${action.type} requires target element identifiers.`);
         break;
     }
     for (const id of action.targetElementIds || []) {
@@ -393,7 +498,13 @@ register("request-adaptation", async (request) => {
   return { schemaVersion: 1, planId: makeId("plan"), requestId: request.requestId, tabId: request.tabId, pageRevision: request.pageRevision, status: "rejected", summary: "Adaptation planning belongs to Jac; Electron accepts only a validated plan to apply.", actions: [], confidence: "high", warnings: ["Call the Jac planner, then pass its validated plan to applyAdaptationPlan."], suggestedScope: "none" };
 });
 register("apply-adaptation-plan", async (plan) => {
-  const tab = validatePlan(plan);
+  let tab;
+  try {
+    tab = validatePlan(plan);
+  } catch (error) {
+    if (!error.code) error.code = "INVALID_PLAN";
+    throw error;
+  }
   await pageState(tab);
   if (tab.pageRevision !== plan.pageRevision) throw Object.assign(new Error("Page changed after the plan was created"), { code: "STALE_PAGE_REVISION" });
   const applied = [];
@@ -436,16 +547,22 @@ register("apply-adaptation-plan", async (plan) => {
         }
       }
       const key = await tab.view.webContents.insertCSS(css, { cssOrigin: "user" });
-      applied.push({ key, type: action.type });
+      applied.push({ key, css, type: action.type });
     }
     if (tab.pageRevision !== plan.pageRevision) throw Object.assign(new Error("Page changed while applying the plan"), { code: "STALE_PAGE_REVISION" });
   } catch (error) {
+    const rollbackErrors = [];
     for (const item of applied.reverse()) {
-      if (item.key) await tab.view.webContents.removeInsertedCSS(item.key).catch(() => {});
-      if (item.focusToken) await restoreFocus(tab, item.focusToken).catch(() => {});
+      if (item.key) {
+        try { await tab.view.webContents.removeInsertedCSS(item.key); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+      }
+      if (item.focusToken) {
+        try { await restoreFocus(tab, item.focusToken); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+      }
     }
     const code = error.code === "STALE_PAGE_REVISION" || error.code === "TARGET_NOT_FOUND" ? error.code : "APPLY_FAILED";
-    throw Object.assign(new Error(`Adaptation rolled back: ${error.message}`), { code });
+    const rollbackMessage = rollbackErrors.length ? " Rollback could not fully remove every applied change." : "";
+    throw Object.assign(new Error(`Adaptation rolled back: ${error.message}.${rollbackMessage}`), { code });
   }
   const undoToken = makeId("undo");
   if (tab.lastUndoToken) undoHistory.delete(tab.lastUndoToken);
@@ -459,9 +576,16 @@ register("undo-adaptation", async (token) => {
   const tab = entry && tabs.get(entry.tabId);
   if (tab) await pageState(tab);
   if (!entry || !tab || token.undoToken !== tab.lastUndoToken || tab.pageRevision !== entry.pageRevision) throw Object.assign(new Error("Undo token is stale or unknown"), { code: "UNDO_FAILED" });
-  for (const item of [...entry.applied].reverse()) {
-    if (item.key) await tab.view.webContents.removeInsertedCSS(item.key);
-    if (item.focusToken) await restoreFocus(tab, item.focusToken);
+  try {
+    for (const item of [...entry.applied].reverse()) {
+      if (item.key) await tab.view.webContents.removeInsertedCSS(item.key);
+      if (item.focusToken) await restoreFocus(tab, item.focusToken);
+    }
+  } catch (error) {
+    undoHistory.delete(token.undoToken);
+    tab.lastUndoToken = undefined;
+    bumpRevision(tab, "undo-failed");
+    throw commandError("UNDO_FAILED", `Undo could not complete safely: ${error.message}`);
   }
   undoHistory.delete(token.undoToken);
   tab.lastUndoToken = undefined;
@@ -469,8 +593,8 @@ register("undo-adaptation", async (token) => {
   return { status: "completed", result: "The latest adaptation was undone." };
 });
 register("execute-browser-command", async (command) => {
-  requireKeys(command, ["schemaVersion", "requestId", "tabId", "kind", "arguments", "requiresConfirmation"]);
-  if (command.schemaVersion !== 1 || typeof command.requestId !== "string" || typeof command.tabId !== "string" || typeof command.kind !== "string" || !validObject(command.arguments) || typeof command.requiresConfirmation !== "boolean") throw new Error("Invalid browser command");
+  const validation = validateBrowserCommand(command);
+  if (validation.cancelled) return { status: "cancelled", requestId: command.requestId, result: "Closing a tab requires confirmation." };
   const jacValidation = await callJac("forward_browser_command", { command });
   if (!jacValidation?.ok) return jacValidation;
   const tab = tabs.get(command.tabId);
@@ -546,13 +670,14 @@ function createWindow() {
     width: 1360, height: 900, minWidth: 760, minHeight: 560,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"), contextIsolation: true,
-      nodeIntegration: false, sandbox: true,
+      nodeIntegration: false, sandbox: true, webviewTag: false,
     },
   });
   window.webContents.on("will-navigate", (event, target) => {
     if (target !== pathToFileURL(path.join(__dirname, "placeholder.html")).href) event.preventDefault();
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.on("resize", layoutViews);
   window.on("closed", () => {
     for (const tab of tabs.values()) tab.view.webContents.close();
@@ -582,6 +707,7 @@ function createExperienceWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: false,
     },
   });
   experienceWindow.webContents.on("will-navigate", (event, target) => {
@@ -590,6 +716,7 @@ function createExperienceWindow() {
     } catch { event.preventDefault(); }
   });
   experienceWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  experienceWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
   experienceWindow.on("closed", () => { experienceWindow = undefined; });
   void experienceWindow.loadURL(jacUiUrl).catch((error) => {
     if (experienceWindow && !experienceWindow.isDestroyed()) {
