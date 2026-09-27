@@ -1,10 +1,27 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const invoke = (method, payload) => ipcRenderer.invoke(`accessible-browser:${method}`, payload);
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function invoke(method, payload) {
+  if (payload !== undefined && !isObject(payload)) throw new TypeError(`${method} payload must be a JSON object`);
+  return ipcRenderer.invoke(`accessible-browser:${method}`, payload);
+}
 
 function onPageChanged(listener) {
   if (typeof listener !== "function") throw new TypeError("listener must be a function");
-  const wrapped = (_event, message) => listener(message);
+  const wrapped = (_event, message) => {
+    if (!isObject(message) || message.schemaVersion !== 1 || typeof message.tabId !== "string" || !Number.isInteger(message.pageRevision)) return;
+    listener(Object.freeze({
+      schemaVersion: message.schemaVersion,
+      tabId: message.tabId,
+      pageRevision: message.pageRevision,
+      ...(typeof message.url === "string" ? { url: message.url } : {}),
+      ...(typeof message.title === "string" ? { title: message.title } : {}),
+      ...(typeof message.reason === "string" ? { reason: message.reason } : {}),
+    }));
+  };
   ipcRenderer.on("accessible-browser:page-changed", wrapped);
   return () => ipcRenderer.removeListener("accessible-browser:page-changed", wrapped);
 }
