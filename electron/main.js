@@ -352,10 +352,10 @@ register("apply-adaptation-plan", async (plan) => {
       switch (action.type) {
         case "set_text_scale": css = selector ? `${selector}{font-size:calc(1em * ${params.scale})!important}` : `html{font-size:calc(100% * ${params.scale})!important}body{font-size:1em!important}`; break;
         case "set_spacing": css = `${selector || "body"}{${params.lineHeight === undefined ? "" : `line-height:${params.lineHeight}!important;`}${params.letterSpacing === undefined ? "" : `letter-spacing:${params.letterSpacing}em!important;`}}`; break;
-        case "set_contrast": css = `html{filter:contrast(${params.level === "high" ? 1.45 : 1.1})!important}`; break;
+        case "set_contrast": css = `html{--ab-contrast:${params.level === "high" ? 1.45 : 1.1};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
         case "set_color_filter": {
           const filter = { grayscale: "grayscale(1)", warm: "sepia(.35)", cool: "hue-rotate(12deg)", invert: "invert(1) hue-rotate(180deg)" }[params.filter];
-          css = `html{filter:${filter}!important}`; break;
+          css = `html{--ab-color-filter:${filter};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
         }
         case "reduce_motion": css = params.enabled ? "*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}" : "*,*::before,*::after{scroll-behavior:revert!important;animation-duration:revert!important;animation-iteration-count:revert!important;transition-duration:revert!important}"; break;
         case "enlarge_targets": css = params.enabled ? "button,a[href],input,select,textarea,[role=button]{min-width:2.75rem!important;min-height:2.75rem!important;padding:.5rem!important}" : "button,a[href],input,select,textarea,[role=button]{min-width:revert!important;min-height:revert!important;padding:revert!important}"; break;
@@ -458,7 +458,7 @@ register("execute-browser-command", async (command) => {
         if (!["web", "page"].includes(args.searchType) || typeof args.query !== "string" || args.query.length > 300 || !args.query.trim()) throw new Error("Search requires web or page and 1 to 300 characters of text");
         if (args.searchType === "web") return await navigate(tab, `https://www.google.com/search?q=${encodeURIComponent(args.query)}`);
         const query = JSON.stringify(args.query.trim());
-        const found = await executePageScript(tab, `(() => { const q=${query}; const text=document.body?.innerText||""; const i=text.toLocaleLowerCase().indexOf(q.toLocaleLowerCase()); if(i<0)return false; const nodes=[...document.querySelectorAll("body *")]; const el=nodes.find(n=>n.children.length===0&&n.textContent.toLocaleLowerCase().includes(q.toLocaleLowerCase())); el?.scrollIntoView({block:"center"}); return true; })()`);
+        const found = await executePageScript(tab, `(() => { const q=${query}.toLocaleLowerCase(); const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_ELEMENT); let scanned=0,node; while((node=walker.nextNode())&&scanned<2500){scanned+=1;if(node.children.length===0&&node.textContent.toLocaleLowerCase().includes(q)){node.scrollIntoView({block:"center"});return true;}} return false; })()`);
         return { status: found ? "completed" : "rejected", requestId: command.requestId, result: found ? "Search result focused." : "No matching page text." };
       }
       case "read_page": requireKeys(args, []); return { status: "accepted", requestId: command.requestId, result: "Page reading is not available yet." };
