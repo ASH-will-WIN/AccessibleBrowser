@@ -402,6 +402,22 @@ def:pub app -> JsxElement {
                 profile = pending_profile;
                 has_pending_profile = False;
             }
+            # Persist the settings represented by any successfully applied
+            # plan, including multi-action LLM plans. The page mutation is
+            # still owned by Electron; this only updates Jac's in-memory
+            # profile so explicit preference saving remembers what the user
+            # actually approved and applied.
+            for action in reviewed_wire_plan["actions"] {
+                action_type = action["type"];
+                parameters = action["parameters"];
+                if action_type == "set_text_scale" { profile.textScale = parameters["scale"]; }
+                if action_type == "set_spacing" { profile.spacing = "comfortable" if parameters.get("lineHeight", 1.0) > 1.0 else "normal"; }
+                if action_type == "set_contrast" { profile.contrast = parameters["level"]; }
+                if action_type == "set_color_filter" { profile.colorFilter = parameters["filter"]; }
+                if action_type == "set_reading_font" { profile.readingFont = parameters["font"]; }
+                if action_type == "reduce_motion" { profile.reduceMotion = parameters["enabled"]; }
+                if action_type == "enlarge_targets" { profile.enlargeTargets = parameters["enabled"]; }
+            }
             try {
                 await bridge.accessibleBrowser.jac.recordApplyResult({
                     "requestId": reviewed_wire_plan["requestId"],
