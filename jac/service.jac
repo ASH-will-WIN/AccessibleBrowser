@@ -64,8 +64,8 @@ obj AdaptationService {
         return explain_plan(plan);
     }
 
-    def record_apply_result(requestId: str, planId: str, result: str, undoToken: str) {
-        record_apply(self.store, requestId, planId, result, undoToken);
+    def record_apply_result(requestId: str, planId: str, result: str, undoToken: str) -> bool {
+        return record_apply(self.store, requestId, planId, result, undoToken);
     }
 
     def propose_save(plan: AdaptationPlan) -> PersistenceProposal {

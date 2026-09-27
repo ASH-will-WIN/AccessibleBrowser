@@ -107,6 +107,46 @@ def new_graph_store() -> PreferenceStore {
     return PreferenceStore(filePath="", graphBacked=True);
 }
 
+def valid_preference_value(setting: str, value: any) -> bool {
+    if setting == "textScale" {
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and value >= 1.0 and value <= 2.5;
+    }
+    if setting == "spacing" { return isinstance(value, str) and value in ["normal", "comfortable"]; }
+    if setting == "contrast" { return isinstance(value, str) and value in ["normal", "high", "soft"]; }
+    if setting == "colorFilter" { return isinstance(value, str) and value in ["none", "grayscale", "warm", "cool", "invert"]; }
+    if setting == "reduceMotion" or setting == "enlargeTargets" { return isinstance(value, bool); }
+    if setting == "readingFont" { return isinstance(value, str) and value.strip() != "" and len(value) <= 80; }
+    return False;
+}
+
+def valid_profile(profile: AccessibilityProfile) -> bool {
+    return valid_preference_value("textScale", profile.textScale)
+        and valid_preference_value("spacing", profile.spacing)
+        and valid_preference_value("contrast", profile.contrast)
+        and valid_preference_value("colorFilter", profile.colorFilter)
+        and valid_preference_value("reduceMotion", profile.reduceMotion)
+        and valid_preference_value("enlargeTargets", profile.enlargeTargets)
+        and valid_preference_value("readingFont", profile.readingFont);
+}
+
+def validate_rule(rule: PreferenceRule) -> str {
+    if not isinstance(rule.setting, str) or not isinstance(rule.scope, str) or not isinstance(rule.source, str) or not isinstance(rule.createdAt, str) or not isinstance(rule.updatedAt, str) or not isinstance(rule.origin, str) or not isinstance(rule.pageUrl, str) {
+        return "Preference metadata has an invalid type.";
+    }
+    if rule.setting not in ["textScale", "spacing", "contrast", "colorFilter", "reduceMotion", "enlargeTargets", "readingFont"] {
+        return "Preference setting is not supported.";
+    }
+    if rule.scope not in ["page", "website", "global"] { return "Preference scope must be page, website, or global."; }
+    if rule.source not in ["setup", "voice", "manual", "learned"] { return "Preference source is not supported."; }
+    if not rule.explicitlyApproved { return "Preference approval is required."; }
+    if not valid_preference_value(rule.setting, rule.value) { return "Preference value is invalid for its setting."; }
+    if rule.createdAt.strip() == "" or rule.updatedAt.strip() == "" or len(rule.createdAt) > 80 or len(rule.updatedAt) > 80 { return "Preference timestamps are invalid."; }
+    if rule.scope == "website" and rule.origin.strip() == "" { return "Website preferences require an origin."; }
+    if rule.scope == "page" and (rule.origin.strip() == "" or rule.pageUrl.strip() == "") { return "Page preferences require an origin and page URL."; }
+    if rule.scope == "global" and (rule.origin != "" or rule.pageUrl != "") { return "Global preferences cannot be page-scoped."; }
+    return "";
+}
+
 def profile_to_map(profile: AccessibilityProfile) -> dict[str, any] {
     return {
         "textScale": profile.textScale,
@@ -185,14 +225,16 @@ def load_store(store: PreferenceStore) {
     data = raw as dict[str, any];
     profileData = data.get("activeProfile", {});
     if isinstance(profileData, dict) {
-        store.activeProfile = profile_from_map(profileData as dict[str, any]);
+        candidateProfile = profile_from_map(profileData as dict[str, any]);
+        if (valid_profile(candidateProfile)) { store.activeProfile = candidateProfile; }
     }
     rawRules = data.get("rules", []);
     if isinstance(rawRules, list) {
         store.rules = [];
         for rawRule in rawRules {
             if isinstance(rawRule, dict) {
-                store.rules.append(rule_from_map(rawRule as dict[str, any]));
+                candidate = rule_from_map(rawRule as dict[str, any]);
+                if validate_rule(candidate) == "" { store.rules.append(candidate); }
             }
         }
     }
@@ -202,19 +244,22 @@ def load_store(store: PreferenceStore) {
         for rawRecord in rawHistory {
             if isinstance(rawRecord, dict) {
                 recordData = rawRecord as dict[str, any];
-                store.history.append(ApplyRecord(
-                    requestId=recordData.get("requestId", "") as str,
-                    planId=recordData.get("planId", "") as str,
-                    result=recordData.get("result", "") as str,
-                    undoToken=recordData.get("undoToken", "") as str,
-                    createdAt=recordData.get("createdAt", "") as str
-                ));
+                requestValue = recordData.get("requestId", "") as str;
+                planValue = recordData.get("planId", "") as str;
+                resultValue = recordData.get("result", "") as str;
+                tokenValue = recordData.get("undoToken", "") as str;
+                createdValue = recordData.get("createdAt", "") as str;
+                if valid_apply_record(requestValue, planValue, resultValue, tokenValue, createdValue) {
+                    store.history.append(ApplyRecord(requestId=requestValue, planId=planValue, result=resultValue, undoToken=tokenValue, createdAt=createdValue));
+                }
             }
         }
+        if len(store.history) > 100 { store.history = store.history[len(store.history) - 100:]; }
     }
 }
 
 def save_store(store: PreferenceStore) {
+    if store.filePath.strip() == "" { return; }
     _ab_save_json(store.filePath, store_to_map(store));
 }
 
@@ -269,8 +314,9 @@ def value_from_json(valueJson: str) -> any {
 def graph_load_store() -> PreferenceStore {
     profile = graph_profile_node();
     store = new_graph_store();
-    store.activeProfile = profile_from_node(profile);
-    store.rules = [rule_from_node(rule) for rule in [profile -->][?:PreferenceRuleNode]];
+    candidateProfile = profile_from_node(profile);
+    if (valid_profile(candidateProfile)) { store.activeProfile = candidateProfile; }
+    store.rules = [rule_from_node(rule) for rule in [profile -->][?:PreferenceRuleNode] if validate_rule(rule_from_node(rule)) == ""];
     store.history = [
         ApplyRecord(
             requestId=record.requestId,
@@ -280,7 +326,9 @@ def graph_load_store() -> PreferenceStore {
             createdAt=record.createdAt
         )
         for record in [profile -->][?:PreferenceApplyNode]
+        if valid_apply_record(record.requestId, record.planId, record.result, record.undoToken, record.createdAt)
     ];
+    if len(store.history) > 100 { store.history = store.history[len(store.history) - 100:]; }
     return store;
 }
 
@@ -341,6 +389,7 @@ def graph_record_apply(record: ApplyRecord) {
 }
 
 def update_active_profile(store: PreferenceStore, profile: AccessibilityProfile) {
+    if not valid_profile(profile) or (not store.graphBacked and store.filePath.strip() == "") { return; }
     store.activeProfile = profile;
     if store.graphBacked {
         graph_update_profile(profile);
@@ -376,13 +425,17 @@ def save_preference(store: PreferenceStore, rule: PreferenceRule, explicitlyAppr
             )
         );
     }
-    if rule.scope not in ["page", "website", "global"] {
+    if not store.graphBacked and store.filePath.strip() == "" {
+        return PreferenceSaveResult(ok=False, error=StructuredError(requestId="", code="INVALID_PARAMETERS", message="Preference storage requires a local file path.", retryable=False));
+    }
+    validationError = validate_rule(rule);
+    if validationError != "" {
         return PreferenceSaveResult(
             ok=False,
             error=StructuredError(
                 requestId="",
                 code="INVALID_PARAMETERS",
-                message="Preference scope must be page, website, or global.",
+                message=validationError,
                 retryable=False
             )
         );
@@ -427,18 +480,31 @@ def applicable_preferences(store: PreferenceStore, origin: str, pageUrl: str) ->
     return [rule for rule in selected.values()];
 }
 
-def record_apply(store: PreferenceStore, requestId: str, planId: str, result: str, undoToken: str) {
+def valid_apply_record(requestId: str, planId: str, result: str, undoToken: str, createdAt: str) -> bool {
+    if not isinstance(requestId, str) or not isinstance(planId, str) or not isinstance(result, str) or not isinstance(undoToken, str) or not isinstance(createdAt, str) { return False; }
+    if requestId.strip() == "" or planId.strip() == "" or len(requestId) > 120 or len(planId) > 120 { return False; }
+    if result not in ["accepted", "completed", "rejected", "failed", "cancelled", "undone"] { return False; }
+    if len(undoToken) > 160 or len(createdAt) > 80 or createdAt.strip() == "" { return False; }
+    if result in ["completed", "undone"] and undoToken.strip() == "" { return False; }
+    return True;
+}
+
+def record_apply(store: PreferenceStore, requestId: str, planId: str, result: str, undoToken: str) -> bool {
+    createdAt = now_iso();
+    if not valid_apply_record(requestId, planId, result, undoToken, createdAt) or (not store.graphBacked and store.filePath.strip() == "") { return False; }
     record = ApplyRecord(
         requestId=requestId,
         planId=planId,
         result=result,
         undoToken=undoToken,
-        createdAt=now_iso()
+        createdAt=createdAt
     );
     store.history.append(record);
+    if len(store.history) > 100 { store.history = store.history[len(store.history) - 100:]; }
     if store.graphBacked {
         graph_record_apply(record);
     } else {
         save_store(store);
     }
+    return True;
 }
