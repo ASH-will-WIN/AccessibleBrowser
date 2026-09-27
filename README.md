@@ -1,38 +1,84 @@
-# AccessibleBrowser
+# Accessa
 
-An accessibility-first Chromium browser that adapts webpages to a person's needs, remembers approved preferences, and uses voice and natural-language requests to make the web easier to use.
+Accessa is an accessibility-first Chromium browser. The basic idea is pretty simple: you tell it what would make a page easier to use, it figures out a safe set of changes, and you get to decide whether those changes should be remembered.
 
-## Phase 0 status
+It is still a work in progress, but the main pieces are here. Accessa has a Jac planner, an Electron browser shell, an accessibility panel, deterministic quick actions, natural-language planning through NVIDIA NIM, reversible page changes, and saved preferences.
 
-The repository is being prepared for a Jac-heavy Electron implementation.
+## How it works
 
-- Jac owns product logic, profiles, preferences, memory, and adaptation planning.
-- Electron/Node owns the Chromium host and safe page mutations.
-- NVIDIA NIM API calls are online and configured through environment variables.
+Accessa is split into two main parts:
 
-Read these before contributing:
+- Jac owns the product logic: profiles, preference memory, planning, validation, and explanations.
+- Electron/Node owns the actual browser: tabs, navigation, page snapshots, CSS/DOM changes, undo, and the IPC bridge.
 
-- AGENTS.md — context and AI coding rules
-- ARCHITECTURE.md — component responsibilities and data flow
-- CONTRACTS.md — Jac/Electron message shapes
-- DECISIONS.md — locked decisions and deferred choices
-- PHASE_1_WORKSTREAM_PROMPTS.md — copy-paste briefs for the three parallel build sessions
+The LLM does not get to run arbitrary code. It can only return structured, allowlisted accessibility actions. Electron validates those actions before changing the live page.
 
-## Local setup
+The normal flow looks like this:
 
-Requirements: Node.js/npm, Jac `0.37.23`, and the Electron package installed by `npm install`.
+```text
+webpage
+  → Electron snapshot
+  → Jac request
+  → deterministic or NVIDIA NIM plan
+  → user review
+  → Electron applies reversible changes
+  → optional preference save
+```
 
-1. Copy `.env.example` to `.env`, add your `NVIDIA_API_KEY`, and optionally change `NVIDIA_NIM_MODEL`. Never commit the populated file.
-2. Install JavaScript dependencies with `npm install`.
-3. Run `npm run dev`. This starts Jac, waits for its dev server, opens the Jac UI inside Electron, and exercises the preload bridge on that page.
-4. Run `npm run jac:check` for Jac checks and `npm run graphify` to refresh local architecture evidence.
+Saved preferences can be scoped to one page, one website, or all websites. Once a preference is explicitly approved, Accessa can reuse it automatically on matching pages without calling the LLM again.
 
-For a deterministic local page, run `npm run demo` and open `http://127.0.0.1:4173/` in the active Electron page. See [the vertical-slice runbook](docs/VERTICAL_SLICE_RUNBOOK.md) and [the deterministic action specification](docs/DETERMINISTIC_ACTION_SPEC.md) for the exact verification sequence.
+## Run it locally
 
-The Jac RPC API uses local port `8002`. The Jac UI dev server normally uses `8000`, but Jac may move it when that port is occupied; `npm run dev` detects the emitted UI/API URLs and passes them to Electron. Set `ACCESSIBLE_BROWSER_JAC_URL` and `ACCESSIBLE_BROWSER_JAC_API_URL` to override these endpoints explicitly. NVIDIA NIM uses `https://integrate.api.nvidia.com/v1/chat/completions`; configure its base URL and model with `NVIDIA_NIM_BASE_URL` and `NVIDIA_NIM_MODEL`.
+You need Node/npm, Jac `0.37.23`, and the Electron dependencies.
 
-The native smoke path is available in the Electron shell: load the current page, request a bounded snapshot, preview an allowlisted plan, apply it, and undo it. Fixture tests cover stale, invalid, unavailable-provider, rollback, privacy, and explicit-save failures; the full Jac experience window and UI-driven save flow remain subject to native runtime verification.
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
 
-The Electron shell can also be launched separately with `npm run electron` after `npm run jac:dev` is running.
+If you want the NVIDIA NIM planner, add your key to `.env`:
 
-The exact user-facing accessibility features are intentionally deferred to Phase 1.
+```env
+NVIDIA_API_KEY=your_key_here
+NVIDIA_NIM_MODEL=meta/llama-3.1-8b-instruct
+```
+
+Never commit `.env` or an API key.
+
+There is also a deterministic demo page:
+
+```bash
+npm run demo
+```
+
+Then open `http://127.0.0.1:4173/` in the browser shell.
+
+## Useful checks
+
+```bash
+npm run jac:check
+node tests/integration/run-contract-tests.js
+git diff --check
+```
+
+The contract tests cover snapshots, planning, invalid actions, stale revisions, rollback, undo, provider failures, voice unavailability, privacy, and preference persistence.
+
+## Current state
+
+The browser shell has normal browser basics like tabs, navigation, an address bar, Google search fallback, page snapshots, and an accessibility panel. Quick actions can be combined and applied together. Natural-language requests can produce multi-action plans, and applied LLM settings can be saved as Jac preferences.
+
+The part that still needs regular attention is live end-to-end testing in Electron. The local contract tests are useful, but they do not replace opening the app and checking the real page, planner, apply, undo, and save flow.
+
+## Project notes
+
+If you are working on the project, start with these files:
+
+- [AGENTS.md](AGENTS.md) — project rules and architecture boundaries
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how the pieces fit together
+- [CONTRACTS.md](CONTRACTS.md) — Jac/Electron message contracts
+- [DECISIONS.md](DECISIONS.md) — decisions we are keeping locked
+- [docs/VERTICAL_SLICE_RUNBOOK.md](docs/VERTICAL_SLICE_RUNBOOK.md) — live verification steps
+- [docs/DETERMINISTIC_ACTION_SPEC.md](docs/DETERMINISTIC_ACTION_SPEC.md) — supported accessibility actions
+
+The repo is intentionally Jac-heavy, while Electron stays focused on browser-specific work. If a change crosses that boundary, update the relevant contract and document the decision.
