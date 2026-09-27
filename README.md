@@ -27,6 +27,10 @@ Requirements: Node.js/npm, Jac `0.37.23`, and the Electron package installed by 
 3. Run `npm run dev`. This starts Jac, waits for its dev server, opens the Jac UI inside Electron, and exercises the preload bridge on that page.
 4. Run `npm run jac:check` for Jac checks and `npm run graphify` to refresh local architecture evidence.
 
+The Jac RPC API uses local port `8002`. The Jac UI dev server normally uses `8000`, but Jac may move it when that port is occupied; `npm run dev` reads Jac's generated `.jac/client/.dev-port` marker and passes the detected UI URL to Electron. Set `ACCESSIBLE_BROWSER_JAC_URL` and `ACCESSIBLE_BROWSER_JAC_API_URL` to override these endpoints explicitly.
+
+The first native smoke path is available in the Electron shell: load the current page, request a bounded snapshot, apply the allowlisted development text-scale plan, and undo it. The full Jac experience window and UI-driven save flow remain under active integration verification.
+
 The Electron shell can also be launched separately with `npm run electron` after `npm run jac:dev` is running.
 
 The exact user-facing accessibility features are intentionally deferred to Phase 1.

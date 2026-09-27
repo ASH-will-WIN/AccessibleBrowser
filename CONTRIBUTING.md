@@ -14,7 +14,7 @@ Use a separate branch and preferably a separate worktree for every contributor o
 
 ```text
 npm install
-npm run dev          # starts Jac, waits for port 8000, then opens Electron
+npm run dev          # starts Jac, detects the local UI port, then opens Electron
 npm run jac:check    # checks the Jac project
 npm run graphify     # refreshes local graphify-out/ artifacts
 ```

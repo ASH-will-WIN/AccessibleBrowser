@@ -17,7 +17,7 @@ let tabSequence = 0;
 const undoHistory = new Map();
 
 const jacUiUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
-const jacApiUrl = process.env.ACCESSIBLE_BROWSER_JAC_API_URL || "http://127.0.0.1:8001";
+const jacApiUrl = process.env.ACCESSIBLE_BROWSER_JAC_API_URL || "http://127.0.0.1:8002";
 const jacOperations = new Set([
   "get_active_profile",
   "update_active_profile",
