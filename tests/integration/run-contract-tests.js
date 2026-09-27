@@ -6,7 +6,9 @@ const path = require("node:path");
 
 const {
   FixtureAdapter,
+  BROWSER_COMMAND_KINDS,
   preferenceRank,
+  validateBrowserCommand,
   validatePlan,
   validatePreference,
   validateRequest,
@@ -249,6 +251,50 @@ test("voice provider unavailability sends no BrowserCommand and preserves text p
   assert.equal(result.browserCommandSent, false);
   assert.equal(result.keyboardPathAvailable, true);
   assert.equal(result.textPathAvailable, true);
+});
+
+test("BrowserCommand accepts every allowlisted kind with typed arguments", () => {
+  const commands = [
+    ["new_tab", {}],
+    ["close_tab", {}],
+    ["switch_tab", { tabId: fixtures.snapshot.tabId }],
+    ["back", {}],
+    ["forward", {}],
+    ["reload", {}],
+    ["navigate", { url: "https://example.test/article" }],
+    ["scroll", { deltaY: 400, deltaX: 10 }],
+    ["zoom", { factor: 1.25 }],
+    ["search", { searchType: "page", query: "accessible" }],
+    ["read_page", {}],
+    ["stop_reading", {}],
+  ];
+  assert.equal(commands.length, BROWSER_COMMAND_KINDS.size);
+  for (const [kind, arguments_] of commands) {
+    const result = validateBrowserCommand({
+      schemaVersion: 1,
+      requestId: `command_${kind}`,
+      tabId: fixtures.snapshot.tabId,
+      kind,
+      arguments: arguments_,
+      requiresConfirmation: kind === "close_tab",
+    });
+    assert.equal(result.status, "accepted", kind);
+  }
+});
+
+test("BrowserCommand rejects unknown, unbounded, and unconfirmed operations", () => {
+  const base = {
+    schemaVersion: 1,
+    requestId: "command_invalid",
+    tabId: fixtures.snapshot.tabId,
+    arguments: {},
+    requiresConfirmation: false,
+  };
+  assert.deepEqual(validateBrowserCommand({ ...base, kind: "run_shell" }), { status: "rejected", errorCode: "INVALID_MESSAGE" });
+  assert.deepEqual(validateBrowserCommand({ ...base, kind: "scroll", arguments: { deltaY: 2001 } }), { status: "rejected", errorCode: "INVALID_PARAMETERS" });
+  assert.deepEqual(validateBrowserCommand({ ...base, kind: "zoom", arguments: { factor: 3 } }), { status: "rejected", errorCode: "INVALID_PARAMETERS" });
+  assert.deepEqual(validateBrowserCommand({ ...base, kind: "search", arguments: { searchType: "page", query: "  " } }), { status: "rejected", errorCode: "INVALID_PARAMETERS" });
+  assert.deepEqual(validateBrowserCommand({ ...base, kind: "close_tab" }), { status: "cancelled", errorCode: "USER_CANCELLED" });
 });
 
 console.log(`\nFixture contract tests: ${passed} passed, ${failed} failed`);

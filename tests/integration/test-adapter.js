@@ -15,6 +15,20 @@ const ACTION_TYPES = new Set([
 ]);
 
 const PREFERENCE_SCOPES = new Set(["page", "website", "global"]);
+const BROWSER_COMMAND_KINDS = new Set([
+  "new_tab",
+  "close_tab",
+  "switch_tab",
+  "back",
+  "forward",
+  "reload",
+  "navigate",
+  "scroll",
+  "zoom",
+  "search",
+  "read_page",
+  "stop_reading",
+]);
 const ERROR_CODES = new Set([
   "INVALID_MESSAGE",
   "UNSUPPORTED_VERSION",
@@ -259,6 +273,33 @@ function validatePreference(rule, { privateBrowsing = false } = {}) {
   return true;
 }
 
+function validateBrowserCommand(command) {
+  if (!command || typeof command !== "object" || command.schemaVersion !== 1 || typeof command.requestId !== "string" || typeof command.tabId !== "string" || typeof command.kind !== "string" || !command.arguments || typeof command.arguments !== "object" || Array.isArray(command.arguments) || typeof command.requiresConfirmation !== "boolean") {
+    return { status: "rejected", errorCode: "INVALID_MESSAGE" };
+  }
+  if (!BROWSER_COMMAND_KINDS.has(command.kind)) return { status: "rejected", errorCode: "INVALID_MESSAGE" };
+
+  const args = command.arguments;
+  if (command.kind === "scroll" && (typeof args.deltaY !== "number" || typeof args.deltaX !== "undefined" && typeof args.deltaX !== "number" || Math.abs(args.deltaY) > 2000 || typeof args.deltaX === "number" && Math.abs(args.deltaX) > 1000)) {
+    return { status: "rejected", errorCode: "INVALID_PARAMETERS" };
+  }
+  if (command.kind === "zoom" && (typeof args.factor !== "number" || args.factor < 0.5 || args.factor > 2.5)) {
+    return { status: "rejected", errorCode: "INVALID_PARAMETERS" };
+  }
+  if (command.kind === "search") {
+    if (args.searchType === "focus_field") {
+      if (typeof args.elementId !== "string" || args.elementId === "") return { status: "rejected", errorCode: "INVALID_PARAMETERS" };
+    } else if (args.searchType !== "web" && args.searchType !== "page" || typeof args.query !== "string" || args.query.trim() === "" || args.query.length > 300) {
+      return { status: "rejected", errorCode: "INVALID_PARAMETERS" };
+    }
+  }
+  if (command.kind === "navigate" && (typeof args.url !== "string" || args.url.trim() === "" || args.url.length > 2048)) {
+    return { status: "rejected", errorCode: "INVALID_PARAMETERS" };
+  }
+  if (command.kind === "close_tab" && !command.requiresConfirmation) return { status: "cancelled", errorCode: "USER_CANCELLED" };
+  return { status: "accepted", command: clone(command) };
+}
+
 function preferenceRank(rule) {
   return { global: 0, website: 1, page: 2 }[rule.scope];
 }
@@ -397,11 +438,13 @@ class FixtureAdapter {
 
 module.exports = {
   ACTION_TYPES,
+  BROWSER_COMMAND_KINDS,
   ERROR_CODES,
   FixtureAdapter,
   PREFERENCE_SCOPES,
   preferenceRank,
   validatePlan,
+  validateBrowserCommand,
   validatePreference,
   validateRequest,
   validateSnapshot,
