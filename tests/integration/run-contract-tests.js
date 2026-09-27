@@ -7,7 +7,9 @@ const path = require("node:path");
 const {
   FixtureAdapter,
   BROWSER_COMMAND_KINDS,
+  parseLlmPlanResponse,
   preferenceRank,
+  resolvePreferences,
   validateBrowserCommand,
   validatePlan,
   validatePreference,
@@ -31,6 +33,7 @@ const fixtures = {
   invalidActions: load("invalid-actions.json"),
   failedApply: load("failed-apply.json"),
   llmUnavailable: load("llm-unavailable.json"),
+  malformedLlm: load("malformed-llm.json"),
   voiceUnavailable: load("voice-unavailable.json"),
   snapshotFailure: load("snapshot-failure.json"),
   preferences: load("preferences.json"),
@@ -76,12 +79,34 @@ const adapter = new FixtureAdapter({
   voiceUnavailable: fixtures.voiceUnavailable,
 });
 
+function newAdapter() {
+  return new FixtureAdapter({
+    snapshot: fixtures.snapshot,
+    request: fixtures.request,
+    readyPlan: fixtures.readyPlan,
+    stalePlan: fixtures.stalePlan,
+    failedApply: fixtures.failedApply,
+    llmUnavailable: fixtures.llmUnavailable,
+    voiceUnavailable: fixtures.voiceUnavailable,
+  });
+}
+
 test("page snapshot has the contract fields and excludes sensitive data", () => {
   validateSnapshot(fixtures.snapshot);
   const serialized = JSON.stringify(fixtures.snapshot);
   assert(!/password|cookie|apiKey|formValue|secret/i.test(serialized));
   assert(fixtures.snapshot.contentSummary.length <= 2000);
   assert.equal(fixtures.snapshot.pageMetadata.crossOriginIframes, false);
+});
+
+test("snapshot privacy rejects nested form values and secret-like fields", () => {
+  const contaminated = JSON.parse(JSON.stringify(fixtures.snapshot));
+  contaminated.elements[3].metadata.value = "user-entered secret";
+  assert.throws(() => validateSnapshot(contaminated), /must not include password, form, cookie, secret, token, or value fields/);
+
+  const nestedContaminated = JSON.parse(JSON.stringify(fixtures.snapshot));
+  nestedContaminated.pageMetadata = { nested: { apiKey: "never-persist" } };
+  assert.throws(() => validateSnapshot(nestedContaminated), /must not include password, form, cookie, secret, token, or value fields/);
 });
 
 test("snapshot IDs and element IDs are stable within a page revision", () => {
@@ -114,6 +139,19 @@ test("adaptation request contains profile, page context, rules, and explicit mod
   assert(Object.hasOwn(fixtures.request, "applicableRules"));
   assert(["deterministic", "llm"].includes(fixtures.request.mode));
   assert(!/javascript|<script|shellCommand/i.test(JSON.stringify(fixtures.request)));
+});
+
+test("malformed adaptation requests are rejected before planning", () => {
+  const cases = [
+    ["unsupported schema", { schemaVersion: 2 }],
+    ["unsupported mode", { mode: "remote" }],
+    ["page/request revision mismatch", { pageRevision: fixtures.request.pageRevision + 1 }],
+    ["page/request tab mismatch", { page: { ...fixtures.request.page, tabId: "tab_other" } }],
+    ["profile type mismatch", { activeProfile: { ...fixtures.request.activeProfile, voiceEnabled: "yes" } }],
+  ];
+  for (const [label, change] of cases) {
+    assert.throws(() => validateRequest({ ...fixtures.request, ...change }), undefined, label);
+  }
 });
 
 test("fixture adapter creates a request from the current snapshot", () => {
@@ -153,6 +191,21 @@ test("all invalid action payloads are rejected before mutation", () => {
     assertErrorShape(result, fixture.expectedErrorCode);
     assert.equal(result.changedState, false);
     assert.equal(result.failedActionId, fixture.plan.actions[0].actionId);
+  }
+});
+
+test("malformed plan envelopes are rejected without mutation", () => {
+  const malformed = [
+    null,
+    {},
+    { ...fixtures.readyPlan, status: "noOp", actions: [] },
+    { ...fixtures.readyPlan, requestId: "req_other" },
+    { ...fixtures.readyPlan, confidence: "certain" },
+  ];
+  for (const plan of malformed) {
+    const result = validatePlan(plan, fixtures.request);
+    assertErrorShape(result, "INVALID_PLAN");
+    assert.equal(result.changedState, false);
   }
 });
 
@@ -211,6 +264,24 @@ test("failed apply rolls back earlier actions and makes no partial-success claim
   assert.deepEqual(adapter.pageState, { textScale: 1, spacing: "normal", enlargedTargets: false });
 });
 
+test("navigation invalidates the page revision and undo transaction", () => {
+  const isolated = newAdapter();
+  const applied = isolated.applyPlan(fixtures.readyPlan, fixtures.request);
+  const oldUndoToken = applied.undoToken;
+  const navigation = isolated.navigate("https://other.example/article");
+  assert.equal(navigation.status, "completed");
+  assert.equal(navigation.pageRevision, fixtures.snapshot.pageRevision + 1);
+  assert.equal(navigation.invalidatedUndo, true);
+
+  const staleApply = isolated.applyPlan(fixtures.readyPlan, fixtures.request);
+  assertErrorShape(staleApply, "STALE_PAGE_REVISION");
+  assert.equal(staleApply.changedState, false);
+
+  const staleUndo = isolated.undoPlan(oldUndoToken);
+  assertErrorShape(staleUndo, "UNDO_FAILED");
+  assert.equal(staleUndo.changedState, false);
+});
+
 test("LLM unavailable is truthful, retryable, and does not produce a fake plan", () => {
   const result = adapter.requestPlan({ ...fixtures.request, mode: "llm" });
   assertErrorShape(result, "LLM_UNAVAILABLE");
@@ -218,6 +289,18 @@ test("LLM unavailable is truthful, retryable, and does not produce a fake plan",
   assert.equal(result.changedState, false);
   assert.equal(fixtures.llmUnavailable.fakePlanPresented, false);
   assert.equal(fixtures.llmUnavailable.deterministicControlsAvailable, true);
+});
+
+test("malformed LLM responses become invalid plans without page mutation", () => {
+  const before = JSON.stringify(adapter.pageState);
+  for (const fixture of fixtures.malformedLlm) {
+    const result = parseLlmPlanResponse(fixture.rawResponse, fixtures.request);
+    assertErrorShape(result, fixture.expectedErrorCode);
+    assert.equal(result.retryable, false, fixture.caseId);
+    assert.equal(result.changedState, false, fixture.caseId);
+    assert.equal(Object.hasOwn(result, "plan"), false, fixture.caseId);
+  }
+  assert.equal(JSON.stringify(adapter.pageState), before);
 });
 
 test("explicit preference approval is required and saved values are reloadable", () => {
@@ -234,6 +317,26 @@ test("explicit preference approval is required and saved values are reloadable",
   assert.equal(adapter.loadPreferences().preferences.length, 1);
 });
 
+test("apply, preview, undo, decline, and private browsing never save preferences accidentally", () => {
+  const isolated = newAdapter();
+  const before = isolated.loadPreferences();
+  assert.equal(before.preferences.length, 0);
+  isolated.previewPlan(fixtures.readyPlan, fixtures.request);
+  const applied = isolated.applyPlan(fixtures.readyPlan, fixtures.request);
+  assert.equal(isolated.loadPreferences().preferences.length, 0);
+  isolated.undoPlan(applied.undoToken);
+  assert.equal(isolated.loadPreferences().preferences.length, 0);
+
+  const declined = isolated.savePreference(fixtures.preferences.declined, false);
+  assert.equal(declined.errorCode, "USER_CANCELLED");
+  assert.equal(isolated.loadPreferences().preferences.length, 0);
+
+  const privateRule = { ...fixtures.preferences.approved[0], scope: "global", setting: "contrast", value: "high" };
+  const privateSave = isolated.savePreference(privateRule, true, { privateBrowsing: true });
+  assert.equal(privateSave.errorCode, "PERMISSION_DENIED");
+  assert.equal(isolated.loadPreferences().preferences.length, 0);
+});
+
 test("preference scopes use global, website, then page specificity", () => {
   const rules = fixtures.preferences.approved;
   rules.forEach((rule) => validatePreference(rule));
@@ -242,6 +345,24 @@ test("preference scopes use global, website, then page specificity", () => {
   assert.equal(ordered.at(-1).value, 1.5);
   assert.notEqual(rules[1].origin, "https://other.example");
   assert.throws(() => validatePreference(fixtures.preferences.privateBrowsing, { privateBrowsing: true }));
+});
+
+test("preference resolution applies exact-origin/page precedence and ignores unrelated scopes", () => {
+  const rules = fixtures.preferences.approved;
+  const exactPage = resolvePreferences(rules, { origin: "https://example.test", pageUrl: "https://example.test/reading" });
+  assert.equal(exactPage.length, 1);
+  assert.equal(exactPage[0].scope, "page");
+  assert.equal(exactPage[0].value, 1.5);
+
+  const otherPage = resolvePreferences(rules, { origin: "https://example.test", pageUrl: "https://example.test/other" });
+  assert.equal(otherPage.length, 1);
+  assert.equal(otherPage[0].scope, "website");
+  assert.equal(otherPage[0].value, 1.25);
+
+  const otherOrigin = resolvePreferences(rules, { origin: "https://other.example", pageUrl: "https://other.example/reading" });
+  assert.equal(otherOrigin.length, 1);
+  assert.equal(otherOrigin[0].scope, "global");
+  assert.equal(otherOrigin[0].value, 1.1);
 });
 
 test("voice provider unavailability sends no BrowserCommand and preserves text paths", () => {

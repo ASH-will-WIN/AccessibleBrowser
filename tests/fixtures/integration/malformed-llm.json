@@ -1,0 +1,17 @@
+[
+  {
+    "caseId": "invalid-json",
+    "rawResponse": "not-json",
+    "expectedErrorCode": "INVALID_PLAN"
+  },
+  {
+    "caseId": "non-object-json",
+    "rawResponse": "[]",
+    "expectedErrorCode": "INVALID_PLAN"
+  },
+  {
+    "caseId": "actions-not-array",
+    "rawResponse": "{\"schemaVersion\":1,\"planId\":\"plan_bad_model\",\"requestId\":\"req_demo_001\",\"tabId\":\"tab_demo\",\"pageRevision\":7,\"summary\":\"Malformed model plan\",\"actions\":{},\"confidence\":\"medium\",\"warnings\":[],\"suggestedScope\":\"none\",\"status\":\"ready\"}",
+    "expectedErrorCode": "INVALID_PLAN"
+  }
+]
