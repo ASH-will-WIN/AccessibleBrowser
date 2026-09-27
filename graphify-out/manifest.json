@@ -1,26 +1,86 @@
 {
   "electron/main.js": {
-    "mtime": 1790461871.8085756,
-    "seen": 1790462305.019935,
-    "ast_hash": "62428ee1edb82e95121a12fffada7c1a",
-    "semantic_hash": "62428ee1edb82e95121a12fffada7c1a"
+    "mtime": 1790482146.4205048,
+    "seen": 1790482939.558764,
+    "ast_hash": "63a81cd5c88650a8ae26034fa1c9d38d",
+    "semantic_hash": ""
   },
   "electron/preload.js": {
-    "mtime": 1790461871.8657272,
-    "seen": 1790462305.019936,
-    "ast_hash": "8dc2e2655a45f835686899715a7a5688",
-    "semantic_hash": "8dc2e2655a45f835686899715a7a5688"
+    "mtime": 1790481766.5185242,
+    "seen": 1790482939.5587652,
+    "ast_hash": "528dca31d031e59fe75062789000b0fd",
+    "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1790461871.750688,
-    "seen": 1790462305.019937,
-    "ast_hash": "849e7096f7fbb9ac2607ad8aa1383483",
-    "semantic_hash": "849e7096f7fbb9ac2607ad8aa1383483"
+    "mtime": 1790481766.519802,
+    "seen": 1790482939.5587652,
+    "ast_hash": "5cf2c376d7b53b4c0f19fe9e45e5c94a",
+    "semantic_hash": ""
   },
   "scripts/dev.js": {
-    "mtime": 1790461871.6946373,
-    "seen": 1790462305.019938,
-    "ast_hash": "6df1ea43ce34d3d931b70507e4d94437",
-    "semantic_hash": "6df1ea43ce34d3d931b70507e4d94437"
+    "mtime": 1790481728.3702457,
+    "seen": 1790482939.5587661,
+    "ast_hash": "b46b223afa1edcf2b87df38b53bce46e",
+    "semantic_hash": ""
+  },
+  "scripts/jac.js": {
+    "mtime": 1790481728.3704617,
+    "seen": 1790482939.558767,
+    "ast_hash": "4bbf10cfe5a018d504523461b67b515e",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1790461182.224932,
+    "seen": 1790482939.558767,
+    "ast_hash": "33bb0f35db3a6655589abe8d0be3fd93",
+    "semantic_hash": ""
+  },
+  "ARCHITECTURE.md": {
+    "mtime": 1790482463.737942,
+    "seen": 1790482939.558768,
+    "ast_hash": "1970c5910c35266bcffa1bb92074b9a6",
+    "semantic_hash": ""
+  },
+  "CONTRACTS.md": {
+    "mtime": 1790481728.3687441,
+    "seen": 1790482939.558768,
+    "ast_hash": "532bfaa872ec71bfcb5a286ed25b8723",
+    "semantic_hash": ""
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1790461872.0400488,
+    "seen": 1790482939.558769,
+    "ast_hash": "361205299a40079cfb655ec35af4c8e1",
+    "semantic_hash": ""
+  },
+  "DECISIONS.md": {
+    "mtime": 1790482458.416828,
+    "seen": 1790482939.558769,
+    "ast_hash": "d3b7ebf38f9f752b59a1d224ef5a263a",
+    "semantic_hash": ""
+  },
+  "JAC_CORE.md": {
+    "mtime": 1790481766.517998,
+    "seen": 1790482939.55877,
+    "ast_hash": "f095c9a6289b5ce71b8d666b796be61d",
+    "semantic_hash": ""
+  },
+  "PHASE_1_WORKSTREAM_PROMPTS.md": {
+    "mtime": 1790464219.0259082,
+    "seen": 1790482939.55877,
+    "ast_hash": "8c9a170008fa6e4f1d7913e08441443d",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1790464251.1118407,
+    "seen": 1790482939.558771,
+    "ast_hash": "a8d10c0912abb5761b6bfb1c1920cff0",
+    "semantic_hash": ""
+  },
+  "electron/placeholder.html": {
+    "mtime": 1790481728.3696532,
+    "seen": 1790482939.558771,
+    "ast_hash": "5ae7024f027e1fc7cd2a8a28719c3a2f",
+    "semantic_hash": ""
   }
 }
