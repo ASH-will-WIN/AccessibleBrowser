@@ -7,11 +7,14 @@ standard library so the repository does not acquire a provider-specific SDK.
 
 import from .core {
     AccessibilityProfile,
+    ElementSummary,
     AdaptationPlan,
     AdaptationRequest,
     PlanAction,
     PlanResult,
     validate_plan,
+    validate_adaptation_request,
+    contains_any,
     plan_error,
     deterministic_plan
 }
@@ -58,7 +61,7 @@ def _ab_openai_plan(api_key, model, payload):
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
-            raw = json.loads(response.read(1_000_000).decode("utf-8"))
+            raw = json.loads(response.read(65_536).decode("utf-8"))
         content = raw["choices"][0]["message"]["content"]
         if not isinstance(content, str) or len(content) > 32_000:
             return {"ok": False, "error": "The model response was empty or too large."}
@@ -82,35 +85,55 @@ def profile_to_payload(profile: AccessibilityProfile) -> dict[str, any] {
     };
 }
 
+def bounded_rule_value(value: any) -> any {
+    if isinstance(value, str) { return value[:200]; }
+    if isinstance(value, bool) { return value; }
+    if isinstance(value, (int, float)) and value == value and abs(value) <= 1000 { return value; }
+    return None;
+}
+
+def is_sensitive_element(element: ElementSummary) -> bool {
+    role = element.role.lower();
+    label = element.accessibleName.lower();
+    return role in ["textbox", "searchbox", "combobox", "password"]
+        or contains_any(label, ["password", "secret", "token", "api key", "credit card", "ssn"]);
+}
+
 def bounded_payload(request: AdaptationRequest) -> dict[str, any] {
     safeElements: list[dict[str, any]] = [];
     elementCount = 0;
     for element in request.page.elements {
         if elementCount >= 40 { break; }
-        safeText = element.text;
-        if element.role == "textbox" or "password" in element.accessibleName.lower() {
-            safeText = "";
-        }
+        safeText = element.text[:300];
+        if is_sensitive_element(element) { safeText = ""; }
         safeElements.append({
             "elementId": element.elementId,
             "role": element.role,
             "accessibleName": element.accessibleName[:200],
-            "text": safeText[:300],
+            "text": safeText,
             "visible": element.visible,
             "disabled": element.disabled,
-            "bounds": element.bounds
+            "bounds": {
+                "x": element.bounds.get("x", 0),
+                "y": element.bounds.get("y", 0),
+                "width": element.bounds.get("width", 0),
+                "height": element.bounds.get("height", 0)
+            }
         });
         elementCount += 1;
     }
     safeRules: list[dict[str, any]] = [];
+    ruleCount = 0;
     for rule in request.applicableRules {
+        if ruleCount >= 20 { break; }
         safeRules.append({
             "setting": rule.setting,
-            "value": rule.value,
+            "value": bounded_rule_value(rule.value),
             "scope": rule.scope,
             "source": rule.source,
             "explicitlyApproved": rule.explicitlyApproved
         });
+        ruleCount += 1;
     }
     return {
         "schemaVersion": request.schemaVersion,
@@ -125,10 +148,13 @@ def bounded_payload(request: AdaptationRequest) -> dict[str, any] {
             "url": request.page.url[:500],
             "origin": request.page.origin[:300],
             "title": request.page.title[:300],
-            "viewport": request.page.viewport,
+            "viewport": {
+                "width": request.page.viewport.get("width", 0),
+                "height": request.page.viewport.get("height", 0)
+            },
             "elements": safeElements,
-            "sections": [{"role": section.role, "name": section.name[:200]} for section in request.page.sections[:20]],
-            "contentSummary": request.page.contentSummary[:4000]
+            "sections": [{"role": section.role[:80], "name": section.name[:200]} for section in request.page.sections[:10]],
+            "contentSummary": request.page.contentSummary[:2000]
         }
     };
 }
@@ -138,17 +164,40 @@ def string_list(data: any, key: str) -> list[str] {
     value = data.get(key, []);
     if isinstance(value, list) {
         for item in value {
-            if isinstance(item, str) { output.append(item); }
+            if isinstance(item, str) and len(item) <= 500 { output.append(item); }
         }
     }
     return output;
 }
 
 def model_plan_from_map(data: dict[str, any], request: AdaptationRequest) -> PlanResult {
-    rawActions = data.get("actions", []);
+    rawActions = data.get("actions");
     actions: list[PlanAction] = [];
-    if not isinstance(rawActions, list) {
+    if not isinstance(rawActions, list) or len(rawActions) > 20 {
         return plan_error(request.requestId, "INVALID_PLAN", "Model actions must be an array.", False);
+    }
+    if data.get("schemaVersion", 1) is not None and not isinstance(data.get("schemaVersion", 1), int) {
+        return plan_error(request.requestId, "INVALID_PLAN", "Model schemaVersion must be an integer.", False);
+    }
+    modelRequestId = data.get("requestId", request.requestId);
+    modelTabId = data.get("tabId", request.tabId);
+    modelRevision = data.get("pageRevision", request.pageRevision);
+    if not isinstance(modelRequestId, str) or modelRequestId != request.requestId or not isinstance(modelTabId, str) or modelTabId != request.tabId or not isinstance(modelRevision, int) or modelRevision != request.pageRevision {
+        return plan_error(request.requestId, "INVALID_PLAN", "Model plan metadata does not match the request.", False);
+    }
+    summaryValue = data.get("summary", "Prepared an accessibility adaptation plan.");
+    confidenceValue = data.get("confidence", "medium");
+    scopeValue = data.get("suggestedScope", "page");
+    statusValue = data.get("status", "ready");
+    if not isinstance(summaryValue, str) or len(summaryValue) > 1000 or not isinstance(confidenceValue, str) or not isinstance(scopeValue, str) or not isinstance(statusValue, str) {
+        return plan_error(request.requestId, "INVALID_PLAN", "Model plan metadata has an invalid type or size.", False);
+    }
+    rawWarnings = data.get("warnings", []);
+    if not isinstance(rawWarnings, list) or len(rawWarnings) > 30 {
+        return plan_error(request.requestId, "INVALID_PLAN", "Model warnings must be a bounded array.", False);
+    }
+    for warning in rawWarnings {
+        if not isinstance(warning, str) or len(warning) > 500 { return plan_error(request.requestId, "INVALID_PLAN", "Model warnings must be bounded strings.", False); }
     }
     actionNumber = 1;
     for rawAction in rawActions {
@@ -164,18 +213,25 @@ def model_plan_from_map(data: dict[str, any], request: AdaptationRequest) -> Pla
         if not isinstance(parameters, dict) {
             return plan_error(request.requestId, "INVALID_PARAMETERS", "Model action parameters must be an object.", False);
         }
-        actionId = item.get("actionId", "model_action_" + str(actionNumber));
-        reason = item.get("reason", "Suggested by the accessibility planner.");
-        reversible = item.get("reversible", True);
+        actionId = item.get("actionId");
+        reason = item.get("reason");
+        reversible = item.get("reversible");
         if not isinstance(actionId, str) or not isinstance(reason, str) or not isinstance(reversible, bool) {
             return plan_error(request.requestId, "INVALID_PLAN", "Model action metadata has an invalid type.", False);
         }
+        if len(actionId) == 0 or len(actionId) > 120 or reason.strip() == "" or len(reason) > 500 or not reversible {
+            return plan_error(request.requestId, "INVALID_PLAN", "Model actions must be bounded, explained, and reversible.", False, actionId as str);
+        }
         targetIds: list[str] = [];
         rawTargets = item.get("targetElementIds", []);
-        if isinstance(rawTargets, list) {
-            for target in rawTargets {
-                if isinstance(target, str) { targetIds.append(target); }
+        if not isinstance(rawTargets, list) or len(rawTargets) > 100 {
+            return plan_error(request.requestId, "INVALID_PLAN", "Model targetElementIds must be a bounded array.", False, actionId as str);
+        }
+        for target in rawTargets {
+            if not isinstance(target, str) or target.strip() == "" or len(target) > 120 {
+                return plan_error(request.requestId, "INVALID_PLAN", "Model target element IDs must be bounded strings.", False, actionId as str);
             }
+            targetIds.append(target);
         }
         actions.append(PlanAction(
             actionId=actionId,
@@ -192,13 +248,13 @@ def model_plan_from_map(data: dict[str, any], request: AdaptationRequest) -> Pla
         planId=data.get("planId", "plan_" + request.requestId) as str,
         requestId=request.requestId,
         tabId=request.tabId,
-        pageRevision=data.get("pageRevision", request.pageRevision) as int,
-        summary=data.get("summary", "Prepared an accessibility adaptation plan.") as str,
+        pageRevision=modelRevision as int,
+        summary=summaryValue as str,
         actions=actions,
-        confidence=data.get("confidence", "medium") as str,
+        confidence=confidenceValue as str,
         warnings=string_list(data, "warnings"),
-        suggestedScope=data.get("suggestedScope", "page") as str,
-        status=data.get("status", "ready") as str
+        suggestedScope=scopeValue as str,
+        status=statusValue as str
     );
     return validate_plan(plan, request);
 }
@@ -231,6 +287,8 @@ def llm_plan(request: AdaptationRequest) -> PlanResult {
 }
 
 def create_adaptation_plan(request: AdaptationRequest) -> PlanResult {
+    requestError = validate_adaptation_request(request);
+    if requestError is not None { return PlanResult(ok=False, error=requestError); }
     if request.mode != "llm" {
         return deterministic_plan(request);
     }
@@ -238,7 +296,7 @@ def create_adaptation_plan(request: AdaptationRequest) -> PlanResult {
     if result.ok { return result; }
     fallback = deterministic_plan(request);
     if fallback.ok and fallback.plan is not None {
-        fallback.plan.warnings.append("The online planner was unavailable; a deterministic local plan was used.");
+        fallback.plan.warnings.append("The online planner was unavailable or returned an invalid plan; a deterministic local plan was used.");
         return fallback;
     }
     return result;

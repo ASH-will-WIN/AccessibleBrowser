@@ -77,8 +77,7 @@ def:pub record_apply_result(
     result: str,
     undoToken: str
 ) -> bool {
-    api_service().record_apply_result(requestId, planId, result, undoToken);
-    return True;
+    return api_service().record_apply_result(requestId, planId, result, undoToken);
 }
 
 def:pub propose_persistence(plan: AdaptationPlan) -> PersistenceProposal {
