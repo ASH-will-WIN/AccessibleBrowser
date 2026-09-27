@@ -4,6 +4,7 @@ const { spawnJac } = require("./jac");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const jacUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
+const jacStartupTimeoutMs = Number(process.env.ACCESSIBLE_BROWSER_JAC_TIMEOUT_MS) || 120_000;
 
 let jacProcess;
 let electronProcess;
@@ -68,7 +69,7 @@ async function main() {
     shutdown(1);
   });
 
-  await waitForJac(jacUrl);
+  await waitForJac(jacUrl, jacStartupTimeoutMs);
 
   const electronBinary = require("electron");
   electronProcess = spawn(electronBinary, [repositoryRoot], {
