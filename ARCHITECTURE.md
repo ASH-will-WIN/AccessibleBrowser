@@ -2,10 +2,12 @@
 
 ## Product boundary
 
-AccessibleBrowser is a true Chromium wrapper with a Jac-heavy product layer. The browser has two cooperating processes:
+AccessibleBrowser is a true Chromium wrapper with a Jac-heavy product layer. The browser has two cooperating processes and two UI surfaces:
 
 1. Jac product layer — profile state, preference graph, request interpretation, LLM planning, explanations, and user-facing accessibility experience.
 2. Electron/Node browser layer — Chromium window, navigation, tabs, page inspection, safe page changes, undo, and the narrow IPC bridge.
+
+The Electron shell window provides navigation and browser controls. A separate trusted Jac experience window renders the accessibility workflow. Both use the preload bridge; only the shell and configured Jac UI origin are accepted as IPC senders. Jac UI requests reach the local Jac API through `ACCESSIBLE_BROWSER_JAC_API_URL` (default `http://127.0.0.1:8002`). The Jac UI uses `ACCESSIBLE_BROWSER_JAC_URL` when supplied; otherwise the launcher detects the local Jac dev HTML server (whose port may move from the default `8000` when a port is occupied).
 
 ## Data flow
 
@@ -15,13 +17,13 @@ AccessibleBrowser is a true Chromium wrapper with a Jac-heavy product layer. The
     Jac builds an adaptation request
               |
               v
-    Online OpenAI model chooses an allowlisted plan
+              Online NVIDIA NIM model chooses an allowlisted plan
               |
               v
     Jac validates and explains the plan
               |
               v
-    Typed IPC message to Electron
+    Typed preload bridge message to Electron
               |
               v
     Electron applies reversible DOM/CSS/browser actions
@@ -37,7 +39,7 @@ AccessibleBrowser is a true Chromium wrapper with a Jac-heavy product layer. The
 - Adaptation request interpretation
 - Page understanding and plan generation
 - Plan validation and human-readable explanations
-- OpenAI API integration behind a small provider boundary
+- NVIDIA NIM API integration behind a small provider boundary
 - Future Jac UI and voice interaction logic where practical
 
 ## Electron/Node owns

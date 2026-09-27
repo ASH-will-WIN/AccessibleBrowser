@@ -1,0 +1,15 @@
+{
+  "requestId": "req_voice_unavailable_001",
+  "planId": "plan_voice_unavailable_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "status": "failed",
+  "errorCode": "VOICE_PROVIDER_UNAVAILABLE",
+  "message": "Voice is unavailable right now. Use keyboard or text controls instead.",
+  "retryable": true,
+  "providerState": "unavailable",
+  "browserCommandSent": false,
+  "keyboardPathAvailable": true,
+  "textPathAvailable": true,
+  "developmentOnlyTextAdapter": true
+}

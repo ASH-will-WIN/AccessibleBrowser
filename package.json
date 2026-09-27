@@ -7,10 +7,11 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "start": "node scripts/dev.js",
+    "demo": "node scripts/demo-server.js",
     "electron": "electron .",
-    "jac:dev": "jac run",
-    "jac:check": "jac check",
-    "format:jac": "jac fmt main.jac frontend.jac jac/main.jac",
+    "jac:dev": "node scripts/jac.js run",
+    "jac:check": "node scripts/jac.js check && node scripts/jac.js check jac/api.jac jac/core.jac jac/persistence.jac jac/provider.jac jac/fixtures.jac jac/service.jac jac/core_test.jac",
+    "format:jac": "node scripts/jac.js fmt main.jac frontend.jac jac/main.jac jac/api.jac jac/core.jac jac/persistence.jac jac/provider.jac jac/service.jac jac/fixtures.jac",
     "graphify": "graphify . --directed"
   },
   "devDependencies": {

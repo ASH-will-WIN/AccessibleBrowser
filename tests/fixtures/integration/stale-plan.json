@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "planId": "plan_stale_001",
+  "requestId": "req_stale_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "expectedCurrentPageRevision": 8,
+  "summary": "This plan was made for the previous page revision.",
+  "actions": [
+    {
+      "actionId": "action_stale_scale",
+      "type": "set_text_scale",
+      "parameters": { "scale": 1.25 },
+      "reason": "The old snapshot suggested larger text.",
+      "reversible": true
+    }
+  ],
+  "confidence": "medium",
+  "warnings": [],
+  "suggestedScope": "none",
+  "status": "ready",
+  "expectedResult": {
+    "status": "rejected",
+    "errorCode": "STALE_PAGE_REVISION",
+    "retryable": true,
+    "mutationApplied": false
+  }
+}

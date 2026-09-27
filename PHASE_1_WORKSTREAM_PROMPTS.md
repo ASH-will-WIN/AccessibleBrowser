@@ -56,7 +56,7 @@ The repository is:
 /Users/ashwinshrivastav/Documents/GitHub/AccessibleBrowser
 ```
 
-The project uses Electron with Node.js and Jac `0.37.23`. The runtime model is an online OpenAI API model called from Jac. Electron must never call the OpenAI API directly. The model must never send arbitrary JavaScript, arbitrary CSS, shell commands, raw selectors, or unrestricted browser actions to Electron.
+The project uses Electron with Node.js and Jac `0.37.23`. The runtime model is an online NVIDIA NIM API model called from Jac. Electron must never call the NIM API directly. The model must never send arbitrary JavaScript, arbitrary CSS, shell commands, raw selectors, or unrestricted browser actions to Electron.
 
 The current Phase 0 scaffold already contains:
 
@@ -320,7 +320,7 @@ Copy everything from this heading through the end of this section into the fresh
 
 You own the Jac product logic for AccessibleBrowser: accessibility profiles, preference memory, site-specific rules, adaptation request interpretation, structured plan generation, OpenAI orchestration, explanations, and local persistence.
 
-The Jac layer must be the center of the product. Electron performs browser-specific operations, but it does not interpret the user’s accessibility intent and it does not call the OpenAI API.
+The Jac layer must be the center of the product. Electron performs browser-specific operations, but it does not interpret the user’s accessibility intent and it does not call the NVIDIA NIM API.
 
 ## Project context
 
@@ -330,7 +330,7 @@ The repository is:
 /Users/ashwinshrivastav/Documents/GitHub/AccessibleBrowser
 ```
 
-The project uses Jac `0.37.23`, Electron, Node.js, and an online OpenAI API model. The current Jac web-app scaffold contains:
+The project uses Jac `0.37.23`, Electron, Node.js, and an online NVIDIA NIM API model. The current Jac web-app scaffold contains:
 
 - `jac.toml`;
 - `main.jac`;
@@ -446,14 +446,15 @@ Make the text larger.
 
 It must create a valid `set_text_scale` action that Electron can apply.
 
-### B3. OpenAI provider boundary
+### B3. NVIDIA NIM provider boundary
 
 Add a small Jac-owned provider boundary for the online model. Keep model calls behind one clear interface so the rest of the product does not depend on a specific SDK shape.
 
 Requirements:
 
-- read the API key from `OPENAI_API_KEY`;
-- read an optional model name from `OPENAI_MODEL`;
+- read the API key from `NVIDIA_API_KEY`;
+- read an optional model name from `NVIDIA_NIM_MODEL`;
+- read an optional base URL from `NVIDIA_NIM_BASE_URL`;
 - never commit secrets;
 - never send secrets to Electron or the browser page;
 - send only the bounded page snapshot and the relevant profile/rules;
@@ -565,7 +566,7 @@ Do not invent a separate mock protocol.
 
 Implement safe behavior for:
 
-- missing `OPENAI_API_KEY`;
+- missing `NVIDIA_API_KEY`;
 - LLM timeouts;
 - malformed model output;
 - unsupported action types;
@@ -606,7 +607,7 @@ This workstream is ready for integration when:
 
 - the shared conceptual types exist in Jac;
 - deterministic adaptation planning works without the LLM;
-- the OpenAI provider is isolated behind a Jac boundary;
+- the NVIDIA NIM provider is isolated behind a Jac boundary;
 - model output is validated against the allowlist;
 - explanations and warnings are available to the UI;
 - profile and approved preference persistence works locally;
@@ -643,7 +644,7 @@ The repository is:
 /Users/ashwinshrivastav/Documents/GitHub/AccessibleBrowser
 ```
 
-The project uses Jac `0.37.23` for product logic and UI, Electron for the Chromium shell, and an online OpenAI model behind Jac. The current UI scaffold contains:
+The project uses Jac `0.37.23` for product logic and UI, Electron for the Chromium shell, and an online NVIDIA NIM model behind Jac. The current UI scaffold contains:
 
 - `main.jac`;
 - `frontend.jac`;

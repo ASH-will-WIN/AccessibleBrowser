@@ -1,0 +1,13 @@
+{
+  "requestId": "req_llm_unavailable_001",
+  "planId": "plan_llm_unavailable_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "status": "failed",
+  "errorCode": "LLM_UNAVAILABLE",
+  "message": "The online planner is unavailable. You can retry or use deterministic controls.",
+  "retryable": true,
+  "changedState": false,
+  "fakePlanPresented": false,
+  "deterministicControlsAvailable": true
+}

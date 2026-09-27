@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "requestId": "req_stale_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "expectedCurrentPageRevision": 8,
+  "errorCode": "STALE_PAGE_REVISION",
+  "message": "The page changed after the request snapshot was captured.",
+  "retryable": true,
+  "mutationApplied": false
+}

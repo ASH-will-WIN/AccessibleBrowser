@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "snapshotId": "snapshot_demo_001",
+  "tabId": "tab_demo",
+  "pageRevision": 7,
+  "url": "https://example.test/reading",
+  "origin": "https://example.test",
+  "title": "Accessible demo article",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "scroll": {
+    "x": 0,
+    "y": 0
+  },
+  "elements": [
+    {
+      "elementId": "el_heading_1",
+      "role": "heading",
+      "accessibleName": "Accessible demo article",
+      "visibleText": "Accessible demo article",
+      "visibility": "visible",
+      "disabled": false,
+      "bounds": {
+        "x": 80,
+        "y": 64,
+        "width": 760,
+        "height": 54
+      },
+      "metadata": {
+        "level": 1
+      }
+    },
+    {
+      "elementId": "el_button_1",
+      "role": "button",
+      "accessibleName": "Start reading",
+      "visibleText": "Start reading",
+      "visibility": "visible",
+      "disabled": false,
+      "bounds": {
+        "x": 80,
+        "y": 168,
+        "width": 144,
+        "height": 40
+      },
+      "metadata": {
+        "controlType": "button"
+      }
+    },
+    {
+      "elementId": "el_link_1",
+      "role": "link",
+      "accessibleName": "More accessibility tips",
+      "visibleText": "More accessibility tips",
+      "visibility": "visible",
+      "disabled": false,
+      "bounds": {
+        "x": 80,
+        "y": 604,
+        "width": 220,
+        "height": 28
+      },
+      "metadata": {
+        "hrefOrigin": "https://example.test"
+      }
+    },
+    {
+      "elementId": "el_input_1",
+      "role": "textbox",
+      "accessibleName": "Search this article",
+      "visibleText": "",
+      "visibility": "visible",
+      "disabled": false,
+      "bounds": {
+        "x": 880,
+        "y": 64,
+        "width": 280,
+        "height": 40
+      },
+      "metadata": {
+        "inputType": "search"
+      }
+    }
+  ],
+  "sections": [
+    {
+      "sectionId": "section_main",
+      "heading": "Main article",
+      "elementIds": ["el_heading_1", "el_button_1", "el_link_1"]
+    }
+  ],
+  "contentSummary": "An article page with a heading, a reading action, a search field, and a related accessibility link.",
+  "pageMetadata": {
+    "language": "en",
+    "hasForms": true,
+    "crossOriginIframes": false
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "plan": {
+    "schemaVersion": 1,
+    "planId": "plan_failed_apply_001",
+    "requestId": "req_failed_apply_001",
+    "tabId": "tab_demo",
+    "pageRevision": 7,
+    "summary": "Apply two reversible readability changes.",
+    "actions": [
+      {
+        "actionId": "action_failed_scale",
+        "type": "set_text_scale",
+        "parameters": { "scale": 1.25 },
+        "reason": "Increase text size.",
+        "reversible": true
+      },
+      {
+        "actionId": "action_failed_spacing",
+        "type": "set_spacing",
+        "parameters": { "spacing": "comfortable" },
+        "reason": "This action is intentionally made to fail during apply.",
+        "reversible": true
+      }
+    ],
+    "confidence": "medium",
+    "warnings": [],
+    "suggestedScope": "none",
+    "status": "ready"
+  },
+  "forcedFailure": {
+    "actionId": "action_failed_spacing",
+    "errorCode": "APPLY_FAILED"
+  },
+  "expectedResult": {
+    "status": "failed",
+    "errorCode": "APPLY_FAILED",
+    "retryable": false,
+    "rolledBack": true,
+    "partialSuccess": false,
+    "changedState": false
+  }
+}

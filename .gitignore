@@ -12,3 +12,4 @@ graphify-out/
 coverage/
 __pycache__/
 .jac/
+.codex/config.toml
