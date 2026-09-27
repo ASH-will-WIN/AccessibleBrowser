@@ -1,7 +1,31 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function jac(operation, payload = {}) {
+  return ipcRenderer.invoke("accessible-browser:jac", { operation, payload });
+}
+
 contextBridge.exposeInMainWorld("accessibleBrowser", {
   ping: () => ipcRenderer.invoke("accessible-browser:ping"),
+  jac: {
+    getActiveProfile: () => jac("get_active_profile"),
+    updateActiveProfile: (profile) => jac("update_active_profile", { profile }),
+    getApplicablePreferences: (origin, pageUrl) =>
+      jac("get_applicable_preferences", { origin, pageUrl }),
+    createAdaptationRequest: (request) =>
+      jac("create_adaptation_request", request),
+    createAdaptationPlan: (request) =>
+      jac("create_adaptation_plan", { adaptation: request }),
+    explainAdaptationPlan: (plan) =>
+      jac("explain_adaptation_plan", { plan }),
+    recordApplyResult: (record) =>
+      jac("record_apply_result", record),
+    proposePersistence: (plan) =>
+      jac("propose_persistence", { plan }),
+    saveApprovedPreference: (rule, explicitlyApproved) =>
+      jac("save_approved_preference", { rule, explicitlyApproved }),
+  },
+  executeBrowserCommand: (command) =>
+    ipcRenderer.invoke("accessible-browser:browser-command", command),
 });
 
 function updateBridgeStatus() {

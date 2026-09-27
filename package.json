@@ -9,8 +9,8 @@
     "start": "node scripts/dev.js",
     "electron": "electron .",
     "jac:dev": "jac run",
-    "jac:check": "jac check",
-    "format:jac": "jac fmt main.jac frontend.jac jac/main.jac",
+    "jac:check": "jac check && jac check jac/api.jac jac/core.jac jac/persistence.jac jac/provider.jac jac/fixtures.jac jac/service.jac jac/core_test.jac",
+    "format:jac": "jac fmt main.jac frontend.jac jac/main.jac jac/api.jac jac/core.jac jac/persistence.jac jac/provider.jac jac/service.jac jac/fixtures.jac",
     "graphify": "graphify . --directed"
   },
   "devDependencies": {
