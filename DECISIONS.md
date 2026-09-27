@@ -24,6 +24,10 @@ The prototype is single-user and local-first. It stores approved profile setting
 
 Phase 0 creates documentation, contracts, toolchain setup, collaboration rules, and a minimal bridge smoke path. The final demo page, full voice mode, complete accessibility transformations, and Simple Mode are deferred to Phase 1.
 
+## D007 — Address-bar navigation uses the constrained browser command
+
+Typed address-bar navigation uses the `navigate` BrowserCommand with a bounded URL argument. Electron accepts only HTTP and HTTPS destinations and rejects embedded credentials and other protocols.
+
 ## Deferred decisions
 
 - Exact demonstration page

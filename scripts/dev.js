@@ -1,5 +1,6 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { spawnJac } = require("./jac");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const jacUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "http://127.0.0.1:8000";
@@ -13,6 +14,15 @@ function waitForJac(url, timeoutMs = 45_000) {
 
   return new Promise((resolve, reject) => {
     const poll = async () => {
+      if (jacProcess?.exitCode !== null && jacProcess?.exitCode !== undefined) {
+        reject(new Error(`Jac exited before becoming ready (exit code ${jacProcess.exitCode})`));
+        return;
+      }
+      if (jacProcess?.signalCode) {
+        reject(new Error(`Jac exited before becoming ready (signal ${jacProcess.signalCode})`));
+        return;
+      }
+
       try {
         const response = await fetch(url);
         if (response.ok) {
@@ -48,7 +58,7 @@ function shutdown(exitCode = 0) {
 }
 
 async function main() {
-  jacProcess = spawn("jac", ["run"], {
+  jacProcess = spawnJac(["run"], {
     cwd: repositoryRoot,
     stdio: "inherit",
   });

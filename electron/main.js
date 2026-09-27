@@ -408,6 +408,7 @@ register("execute-browser-command", async (command) => {
   const tab = tabs.get(command.tabId);
   const args = command.arguments;
   try {
+    if (!tab) throw Object.assign(new Error("Browser command targets an unknown tab"), { code: "TARGET_NOT_FOUND" });
     switch (command.kind) {
       case "new_tab": {
         requireKeys(args, [], ["url"]);
@@ -431,7 +432,7 @@ register("execute-browser-command", async (command) => {
       case "reload": requireKeys(args, []); if (!tab) throw new Error("Tab not found"); tab.view.webContents.reload(); break;
       case "navigate": {
         requireKeys(args, ["url"]);
-        const result = await navigate(tab || getActiveTab(), args.url);
+        const result = await navigate(tab, args.url);
         return { ...result, requestId: command.requestId };
       }
       case "scroll": {
@@ -456,7 +457,7 @@ register("execute-browser-command", async (command) => {
         }
         requireKeys(args, ["searchType", "query"]);
         if (!["web", "page"].includes(args.searchType) || typeof args.query !== "string" || args.query.length > 300 || !args.query.trim()) throw new Error("Search requires web or page and 1 to 300 characters of text");
-        if (args.searchType === "web") return await navigate(tab, `https://www.google.com/search?q=${encodeURIComponent(args.query)}`);
+        if (args.searchType === "web") return { ...(await navigate(tab, `https://www.google.com/search?q=${encodeURIComponent(args.query)}`)), requestId: command.requestId };
         const query = JSON.stringify(args.query.trim());
         const found = await executePageScript(tab, `(() => { const q=${query}.toLocaleLowerCase(); const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_ELEMENT); let scanned=0,node; while((node=walker.nextNode())&&scanned<2500){scanned+=1;if(node.children.length===0&&node.textContent.toLocaleLowerCase().includes(q)){node.scrollIntoView({block:"center"});return true;}} return false; })()`);
         return { status: found ? "completed" : "rejected", requestId: command.requestId, result: found ? "Search result focused." : "No matching page text." };
