@@ -90,12 +90,14 @@ Each action has an actionId, an explicit type, typed parameters, optional target
       requestId: string
       tabId: string
       kind: new_tab | close_tab | switch_tab | back | forward
-          | reload | scroll | zoom | search | read_page | stop_reading
+          | reload | navigate | scroll | zoom | search | read_page | stop_reading
       arguments: object
       requiresConfirmation: boolean
     }
 
 The later voice layer maps speech to this allowlisted command shape. Search must distinguish web search, page search, and focusing a search field. Switch tab uses a stable tabId. Scroll and zoom arguments are bounded. Destructive or externally consequential actions must require confirmation.
+
+`navigate` is used by the address bar and accepts a bounded `arguments.url` string. Electron permits only HTTP and HTTPS destinations and rejects embedded credentials and other protocols.
 
 Command results use one of: accepted, completed, rejected, failed, cancelled.
 
