@@ -1,0 +1,52 @@
+{
+  "approved": [
+    {
+      "setting": "textScale",
+      "value": 1.1,
+      "scope": "global",
+      "source": "setup",
+      "explicitlyApproved": true,
+      "createdAt": "2026-09-27T12:00:00Z",
+      "updatedAt": "2026-09-27T12:00:00Z"
+    },
+    {
+      "setting": "textScale",
+      "value": 1.25,
+      "scope": "website",
+      "source": "manual",
+      "origin": "https://example.test",
+      "explicitlyApproved": true,
+      "createdAt": "2026-09-27T12:01:00Z",
+      "updatedAt": "2026-09-27T12:01:00Z"
+    },
+    {
+      "setting": "textScale",
+      "value": 1.5,
+      "scope": "page",
+      "source": "voice",
+      "origin": "https://example.test",
+      "pageUrl": "https://example.test/reading",
+      "explicitlyApproved": true,
+      "createdAt": "2026-09-27T12:02:00Z",
+      "updatedAt": "2026-09-27T12:02:00Z"
+    }
+  ],
+  "declined": {
+    "setting": "spacing",
+    "value": "comfortable",
+    "scope": "website",
+    "source": "manual",
+    "origin": "https://example.test",
+    "explicitlyApproved": false,
+    "createdAt": "2026-09-27T12:03:00Z",
+    "updatedAt": "2026-09-27T12:03:00Z"
+  },
+  "privateBrowsing": {
+    "setting": "contrast",
+    "value": "high",
+    "scope": "global",
+    "source": "manual",
+    "explicitlyApproved": true,
+    "privateBrowsing": true
+  }
+}
