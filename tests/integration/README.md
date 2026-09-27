@@ -112,10 +112,16 @@ generic success response.
 - Cross-origin iframe content is deferred and is represented only by metadata.
 - The fixture adapter models rollback; it does not prove Electron DOM rollback.
 
-## Live integration blocked until the following methods exist
+## Live integration blocker
 
-This branch is based on `origin/main`, whose current Electron preload/main
-surface exposes only `ping`. No live vertical-slice test was run.
+The deterministic fixture harness below is executable, but no live vertical
+slice was run in this worker checkout. The current Electron bridge has
+snapshot/request/apply/undo methods, but the repository does not yet provide a
+test-only launcher/connection seam, a deterministic local demo-page fixture,
+or failure injection hooks for forcing an apply action and voice provider to
+fail. Without those seams, a live test would depend on an interactive Electron
+process, page timing, and external Jac/OpenAI state, so fixture passes must not
+be reported as live integration passes.
 
 The merged implementation must provide a narrow, JSON-compatible seam for:
 
@@ -148,7 +154,8 @@ live passes in CI or in release notes.
 - `ready-plan.json` — allowlisted reversible actions.
 - `rejected-plan.json` — explanation-only rejection with no actions.
 - `stale-request.json`, `stale-plan.json` — retryable revision mismatch.
-- `invalid-actions.json` — unsupported, malformed, unsafe, and unbounded inputs.
+- `invalid-actions.json` — unsupported, malformed, unsafe, unbounded, and unknown-target inputs.
+- `malformed-llm.json` — invalid JSON, non-object, and malformed model plans.
 - `failed-apply.json` — multi-action rollback with no partial-success claim.
 - `llm-unavailable.json` — truthful planner failure with deterministic controls.
 - `voice-unavailable.json` — no BrowserCommand and usable text/keyboard paths.

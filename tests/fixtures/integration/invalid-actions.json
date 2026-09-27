@@ -198,5 +198,56 @@
       "suggestedScope": "none",
       "status": "ready"
     }
+  },
+  {
+    "caseId": "unknown-target-element",
+    "expectedErrorCode": "TARGET_NOT_FOUND",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_target",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unknown target",
+      "actions": [
+        {
+          "actionId": "action_unknown_target",
+          "type": "set_text_scale",
+          "parameters": { "scale": 1.25 },
+          "targetElementIds": ["el_missing"],
+          "reason": "The target is not in the captured snapshot.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
+  },
+  {
+    "caseId": "unknown-target-in-parameters",
+    "expectedErrorCode": "TARGET_NOT_FOUND",
+    "plan": {
+      "schemaVersion": 1,
+      "planId": "plan_invalid_parameter_target",
+      "requestId": "req_demo_001",
+      "tabId": "tab_demo",
+      "pageRevision": 7,
+      "summary": "Unknown parameter target",
+      "actions": [
+        {
+          "actionId": "action_unknown_parameter_target",
+          "type": "hide_regions",
+          "parameters": { "elementIds": ["el_missing"] },
+          "reason": "The target is not in the captured snapshot.",
+          "reversible": true
+        }
+      ],
+      "confidence": "low",
+      "warnings": [],
+      "suggestedScope": "none",
+      "status": "ready"
+    }
   }
 ]

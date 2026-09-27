@@ -61,6 +61,8 @@ const FORBIDDEN_KEYS = new Set([
   "unrestrictedOperation",
 ]);
 
+const FORBIDDEN_SNAPSHOT_KEYS = /^(?:api[_-]?key|cookie|cookies|form[_-]?value|form[_-]?values|password|secret|token|value)$/i;
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -101,6 +103,23 @@ function failure({ requestId, planId, tabId, pageRevision, errorCode, message, r
   };
 }
 
+function findForbiddenSnapshotField(value, path = "snapshot") {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const found = findForbiddenSnapshotField(value[index], `${path}[${index}]`);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value)) {
+    if (FORBIDDEN_SNAPSHOT_KEYS.test(key)) return `${path}.${key}`;
+    const found = findForbiddenSnapshotField(child, `${path}.${key}`);
+    if (found) return found;
+  }
+  return null;
+}
+
 function validateSnapshot(snapshot) {
   const required = [
     "snapshotId",
@@ -123,10 +142,12 @@ function validateSnapshot(snapshot) {
   assert.equal(typeof snapshot.url, "string");
   assert.equal(typeof snapshot.origin, "string");
   assert.equal(typeof snapshot.title, "string");
+  assert.equal(typeof snapshot.contentSummary, "string");
   assert(snapshot.contentSummary.length <= 2000, "Snapshot text must be bounded");
   assert(Number.isFinite(snapshot.viewport.width) && Number.isFinite(snapshot.viewport.height));
   assert(Array.isArray(snapshot.elements));
   assert(Array.isArray(snapshot.sections));
+  assert.equal(findForbiddenSnapshotField(snapshot), null, "Snapshot must not include password, form, cookie, secret, token, or value fields");
 
   const ids = new Set();
   for (const element of snapshot.elements) {
@@ -152,9 +173,16 @@ function validateRequest(request) {
   assert.equal(typeof request.requestId, "string");
   assert.equal(typeof request.tabId, "string");
   assert(Number.isInteger(request.pageRevision));
+  assert.equal(typeof request.userRequest, "string");
   assert(request.userRequest.length > 0 && request.userRequest.length <= 1000);
   assert(["deterministic", "llm"].includes(request.mode));
   assert(Array.isArray(request.applicableRules));
+  assert(request.activeProfile && typeof request.activeProfile === "object" && !Array.isArray(request.activeProfile));
+  for (const [key, value] of Object.entries(request.activeProfile)) {
+    if (["textScale", "spacing", "contrast", "colorFilter", "readingFont"].includes(key)) assert(["textScale"].includes(key) ? typeof value === "number" && Number.isFinite(value) : typeof value === "string");
+    if (["reduceMotion", "enlargeTargets", "voiceEnabled"].includes(key)) assert.equal(typeof value, "boolean");
+  }
+  for (const rule of request.applicableRules) validatePreference(rule);
   validateSnapshot(request.page);
   assert.equal(request.page.tabId, request.tabId);
   assert.equal(request.page.pageRevision, request.pageRevision);
@@ -214,11 +242,14 @@ function validateParameters(action) {
 }
 
 function validatePlan(plan, request, { currentPageRevision = request.pageRevision } = {}) {
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    return failure({ requestId: request.requestId, planId: "unknown", tabId: request.tabId, pageRevision: currentPageRevision, errorCode: "INVALID_PLAN", message: "The planner response was not a plan object.", retryable: false });
+  }
   const base = {
     requestId: plan.requestId || request.requestId,
-    planId: plan.planId,
+    planId: plan.planId || "unknown",
     tabId: plan.tabId || request.tabId,
-    pageRevision: plan.pageRevision,
+    pageRevision: Number.isInteger(plan.pageRevision) ? plan.pageRevision : currentPageRevision,
   };
   if (plan.schemaVersion !== 1 || plan.requestId !== request.requestId || plan.tabId !== request.tabId) {
     return failure({ ...base, errorCode: "INVALID_PLAN", message: "Plan metadata does not match the request.", retryable: false });
@@ -262,6 +293,22 @@ function validatePlan(plan, request, { currentPageRevision = request.pageRevisio
   return { ...metadata({ ...base, status: "ready", changedState: false }), plan: clone(plan) };
 }
 
+function parseLlmPlanResponse(rawResponse, request, { currentPageRevision = request.pageRevision } = {}) {
+  if (typeof rawResponse !== "string" || rawResponse.trim() === "") {
+    return failure({ requestId: request.requestId, planId: "unknown", tabId: request.tabId, pageRevision: currentPageRevision, errorCode: "INVALID_PLAN", message: "The model response was not text.", retryable: false });
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawResponse);
+  } catch {
+    return failure({ requestId: request.requestId, planId: "unknown", tabId: request.tabId, pageRevision: currentPageRevision, errorCode: "INVALID_PLAN", message: "The model response was not valid JSON.", retryable: false });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return failure({ requestId: request.requestId, planId: "unknown", tabId: request.tabId, pageRevision: currentPageRevision, errorCode: "INVALID_PLAN", message: "The model response was not a JSON object.", retryable: false });
+  }
+  return validatePlan(parsed, request, { currentPageRevision });
+}
+
 function validatePreference(rule, { privateBrowsing = false } = {}) {
   for (const field of ["setting", "value", "scope", "source", "explicitlyApproved", "createdAt", "updatedAt"]) {
     assert(Object.hasOwn(rule, field), `Preference is missing ${field}`);
@@ -302,6 +349,21 @@ function validateBrowserCommand(command) {
 
 function preferenceRank(rule) {
   return { global: 0, website: 1, page: 2 }[rule.scope];
+}
+
+function preferenceApplies(rule, { origin, pageUrl }) {
+  if (!rule.explicitlyApproved) return false;
+  if (rule.scope === "global") return true;
+  if (rule.scope === "website") return rule.origin === origin;
+  return rule.origin === origin && rule.pageUrl === pageUrl;
+}
+
+function resolvePreferences(rules, { origin, pageUrl }) {
+  const resolved = new Map();
+  for (const rule of rules.filter((candidate) => preferenceApplies(candidate, { origin, pageUrl })).sort((left, right) => preferenceRank(left) - preferenceRank(right))) {
+    resolved.set(rule.setting, clone(rule));
+  }
+  return [...resolved.values()];
 }
 
 class FixtureAdapter {
@@ -407,8 +469,15 @@ class FixtureAdapter {
     };
   }
 
-  savePreference(rule, explicitlyApproved) {
+  savePreference(rule, explicitlyApproved, { privateBrowsing = false } = {}) {
     const candidate = { ...clone(rule), explicitlyApproved };
+    if (privateBrowsing) {
+      return {
+        ...metadata({ requestId: this.request.requestId, tabId: this.snapshot.tabId, pageRevision: this.snapshot.pageRevision, status: "failed", retryable: false, changedState: false }),
+        errorCode: "PERMISSION_DENIED",
+        message: "Private browsing does not persist preferences.",
+      };
+    }
     if (!explicitlyApproved) {
       return {
         ...metadata({ requestId: this.request.requestId, tabId: this.snapshot.tabId, pageRevision: this.snapshot.pageRevision, status: "cancelled", retryable: false, changedState: false }),
@@ -431,6 +500,23 @@ class FixtureAdapter {
     };
   }
 
+  navigate(url = "https://example.test/next") {
+    this.snapshot = {
+      ...this.snapshot,
+      snapshotId: `${this.snapshot.snapshotId}_navigation`,
+      pageRevision: this.snapshot.pageRevision + 1,
+      url,
+      origin: new URL(url).origin,
+    };
+    this.beforeApply = null;
+    this.undoToken = null;
+    return {
+      ...metadata({ tabId: this.snapshot.tabId, pageRevision: this.snapshot.pageRevision, status: "completed", changedState: false }),
+      url: this.snapshot.url,
+      invalidatedUndo: true,
+    };
+  }
+
   runVoiceCommand() {
     return clone(this.voiceUnavailable);
   }
@@ -443,6 +529,8 @@ module.exports = {
   FixtureAdapter,
   PREFERENCE_SCOPES,
   preferenceRank,
+  parseLlmPlanResponse,
+  resolvePreferences,
   validatePlan,
   validateBrowserCommand,
   validatePreference,
