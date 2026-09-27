@@ -1,4 +1,4 @@
 [mcp_servers.jac]
-command = "jac"
-args = ["mcp"]
+command = "wsl.exe"
+args = ["--distribution", "Ubuntu", "--exec", "/home/gowda_family/.local/bin/jac", "mcp"]
 description = "Jac MCP server"
