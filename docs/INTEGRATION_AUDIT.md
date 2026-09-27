@@ -10,7 +10,7 @@ This audit starts from `origin/integration` at `8ca941b`, fetched on 2026-09-27.
 | --- | --- | --- | --- |
 | Jac conceptual contracts | implemented, unverified | `jac/core.jac` defines `PageSnapshot`, `AdaptationRequest`, `PlanAction`, `AdaptationPlan`, errors, results; `jac/core_test.jac` has focused tests | Run Jac checks and compare every field against `CONTRACTS.md`. |
 | Deterministic planner | implemented, unverified | `jac/core.jac:289` `deterministic_plan`; tests for text scale/readability/no-op | Prove output reaches live UI/Electron path. |
-| OpenAI provider boundary | implemented, unverified | `jac/provider.jac` contains bounded payload and provider functions; `.env.example` exists | Run unavailable/malformed cases without a key; verify no renderer exposure. |
+| NVIDIA NIM provider boundary | implemented, unverified | `jac/provider.jac` contains bounded payload and provider functions; `.env.example` exists | Run unavailable/malformed cases without a key; verify no renderer exposure. |
 | Local preference persistence | implemented, unverified | `jac/persistence.jac` contains file and graph store paths, precedence, explicit approval | Verify reload, scope precedence, declined save, and runtime store location. |
 | Jac public API/service | implemented, unverified | `jac/api.jac` and `jac/service.jac` expose planning, explanation, apply/undo records, persistence, browser-command forwarding | Trace actual caller and bridge usage. |
 | Electron shell | implemented, unverified | `electron/main.js` creates BrowserWindow/WebContentsView and loads Jac UI/page | Run startup and confirm real webpage surface. |
@@ -38,7 +38,7 @@ This audit starts from `origin/integration` at `8ca941b`, fetched on 2026-09-27.
 ## Verification update (2026-09-27)
 
 - `npm run jac:check`: passed (exit 0; Jac emitted existing `any`/intrinsic/undefined-name warnings).
-- `env -u OPENAI_API_KEY -u OPENAI_MODEL node scripts/jac.js test jac/core_test.jac -v`: 11 passed.
+- `env -u NVIDIA_API_KEY -u NVIDIA_NIM_MODEL node scripts/jac.js test jac/core_test.jac -v`: Jac tests pass.
 - `node tests/integration/run-contract-tests.js`: 27 fixture contract cases passed; the harness explicitly reports live Electron/Jac/UI integration as not run.
 - `node --check` passed for Electron and integration-test JavaScript.
 - `git diff --check`: passed.

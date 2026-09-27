@@ -12,6 +12,7 @@ import from .core {
 }
 import from .fixtures {
     fixture_page,
+    fixture_request,
     fixture_readability_request,
     fixture_text_scale_request
 }
@@ -154,4 +155,34 @@ test "active profile can already represent no-op settings" {
     assert result.ok;
     assert result.plan is not None;
     assert result.plan.status == "noOp";
+}
+
+test "deterministic color filter request creates an allowlisted action" {
+    request = fixture_request("Apply a grayscale color filter");
+    result = create_adaptation_plan(request);
+    assert result.ok;
+    assert result.plan is not None;
+    assert result.plan.status == "ready";
+    assert result.plan.actions[0].type == "set_color_filter";
+    assert result.plan.actions[0].parameters["filter"] == "grayscale";
+}
+
+test "deterministic color filter request can restore normal colors" {
+    request = fixture_request("Remove the color filter", "deterministic", AccessibilityProfile(colorFilter="grayscale"));
+    result = create_adaptation_plan(request);
+    assert result.ok;
+    assert result.plan is not None;
+    assert result.plan.status == "ready";
+    assert result.plan.actions[0].type == "set_color_filter";
+    assert result.plan.actions[0].parameters["filter"] == "none";
+}
+
+test "deterministic reading font request creates an allowlisted action" {
+    request = fixture_request("Use a more readable font");
+    result = create_adaptation_plan(request);
+    assert result.ok;
+    assert result.plan is not None;
+    assert result.plan.status == "ready";
+    assert result.plan.actions[0].type == "set_reading_font";
+    assert result.plan.actions[0].parameters["font"] == "reading";
 }

@@ -1,22 +1,42 @@
 const { spawn } = require("node:child_process");
-const fs = require("node:fs/promises");
+const { loadEnvFile } = require("node:process");
 const path = require("node:path");
 const { spawnJac } = require("./jac");
 
 const repositoryRoot = path.resolve(__dirname, "..");
+try { loadEnvFile(path.join(repositoryRoot, ".env")); } catch { /* .env is optional */ }
 const configuredJacUrl = process.env.ACCESSIBLE_BROWSER_JAC_URL || "";
-const jacDevPortFile = path.join(repositoryRoot, ".jac", "client", ".dev-port");
 const jacStartupTimeoutMs = Number(process.env.ACCESSIBLE_BROWSER_JAC_TIMEOUT_MS) || 120_000;
 
 let jacProcess;
 let electronProcess;
 let shuttingDown = false;
+let observedJacUiUrl = "";
+let observedJacApiUrl = "";
+
+function observeJacOutput(chunk, writer) {
+  const text = chunk.toString();
+  writer.write(text);
+  const localMatch = text.match(/\bLocal:\s+(https?:\/\/[^\s]+)/);
+  const apiMatch = text.match(/\bAPI:\s+(https?:\/\/[^\s]+)/) || text.match(/Jac API Server running on\s+(https?:\/\/[^\s]+)/);
+  if (localMatch) observedJacUiUrl = localMatch[1].replace(/[),]+$/, "");
+  if (apiMatch) observedJacApiUrl = apiMatch[1].replace(/[),]+$/, "");
+}
 
 async function isJacUi(url) {
   try {
     const response = await fetch(url);
     const contentType = response.headers.get("content-type") || "";
     return response.ok && (contentType.includes("text/html") || contentType.includes("application/xhtml+xml"));
+  } catch {
+    return false;
+  }
+}
+
+async function isReachable(url) {
+  try {
+    const response = await fetch(url);
+    return response.status < 500;
   } catch {
     return false;
   }
@@ -59,18 +79,31 @@ function waitForJac(timeoutMs = 45_000) {
 }
 
 async function jacUiCandidates() {
+  // The marker can belong to a previous Jac process. Prefer the URL emitted
+  // by the current child process and do not attach Electron to stale servers.
+  if (observedJacUiUrl) return [observedJacUiUrl];
+  return [];
+}
+
+async function jacApiCandidates() {
   const candidates = [];
-  try {
-    const port = Number((await fs.readFile(jacDevPortFile, "utf8")).trim());
-    if (Number.isInteger(port) && port >= 1024 && port <= 65535) candidates.push(`http://127.0.0.1:${port}`);
-  } catch {
-    // Jac may not have written its Vite port marker yet.
-  }
-  for (const port of [8000, 8001, 8003, 8004, 8005]) {
-    const url = `http://127.0.0.1:${port}`;
-    if (!candidates.includes(url)) candidates.push(url);
-  }
+  if (observedJacApiUrl) candidates.push(observedJacApiUrl);
+  const configuredApiUrl = process.env.ACCESSIBLE_BROWSER_JAC_API_URL || "";
+  if (configuredApiUrl && !candidates.includes(configuredApiUrl)) candidates.push(configuredApiUrl);
   return candidates;
+}
+
+async function waitForJacApi(timeoutMs = 45_000) {
+  const startedAt = Date.now();
+  let lastCandidates = [];
+  while (Date.now() - startedAt < timeoutMs) {
+    lastCandidates = await jacApiCandidates();
+    for (const url of lastCandidates) {
+      if (await isReachable(url)) return url;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Jac API did not become ready at ${lastCandidates.join(", ")}`);
 }
 
 function stopProcess(child) {
@@ -86,10 +119,15 @@ function shutdown(exitCode = 0) {
 }
 
 async function main() {
-  jacProcess = spawnJac(["run"], {
+  // The Jac client must be served for the accessibility experience window;
+  // --no-dev starts only the API for this project and cannot provide a UI URL.
+  jacProcess = spawnJac(["run", "--dev"], {
     cwd: repositoryRoot,
-    stdio: "inherit",
+    stdio: ["inherit", "pipe", "pipe"],
   });
+
+  jacProcess.stdout.on("data", (chunk) => observeJacOutput(chunk, process.stdout));
+  jacProcess.stderr.on("data", (chunk) => observeJacOutput(chunk, process.stderr));
 
   jacProcess.on("error", (error) => {
     console.error(`Unable to start Jac: ${error.message}`);
@@ -97,13 +135,17 @@ async function main() {
   });
 
   const resolvedJacUrl = await waitForJac(jacStartupTimeoutMs);
+  const resolvedJacApiUrl = await waitForJacApi(jacStartupTimeoutMs);
 
   const electronBinary = require("electron");
+  const electronEnvironment = { ...process.env };
+  delete electronEnvironment.NVIDIA_API_KEY;
   electronProcess = spawn(electronBinary, [repositoryRoot], {
     cwd: repositoryRoot,
     env: {
-      ...process.env,
+      ...electronEnvironment,
       ACCESSIBLE_BROWSER_JAC_URL: resolvedJacUrl,
+      ACCESSIBLE_BROWSER_JAC_API_URL: resolvedJacApiUrl,
       ACCESSIBLE_BROWSER_DEVELOPMENT: "1",
     },
     stdio: "inherit",

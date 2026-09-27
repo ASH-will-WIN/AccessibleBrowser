@@ -12,7 +12,7 @@ AccessibleBrowser is a Jac-heavy, Electron-based Chromium browser that adapts we
 
 - Jac owns product logic: profiles, preferences, memory, request interpretation, adaptation plans, explanations, and most first-party application code.
 - Electron/Node owns browser-specific work: the desktop window, Chromium page host, tabs/navigation, DOM/page snapshots, safe plan application, undo, and IPC.
-- The runtime model is an online OpenAI API model. Never commit API keys; use environment variables.
+- The runtime model is an online NVIDIA NIM API model. Never commit API keys; use environment variables.
 - Aim substantially above the 40% Jac requirement without moving Electron-specific code into Jac artificially.
 - The model may choose only allowlisted, reversible browser/page actions. It must never return arbitrary JavaScript, CSS, shell commands, or unrestricted browser actions.
 - Preferences are local-first. Save only approved rules, not raw page content by default.

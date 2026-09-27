@@ -8,8 +8,9 @@ Every action is reversible. Electron captures the inserted CSS keys or focus sta
 | --- | --- | --- | --- |
 | `set_text_scale` | `{ "scale": number }`, 1.0–2.5 | Text and controls become proportionally easier to read. | Page by default; website/global only after explicit approval. |
 | `set_spacing` | `{ "lineHeight"?: number, "letterSpacing"?: number }`; line height 1.0–2.5, letter spacing 0–0.2 | Paragraphs and letters have more breathing room. | Same page/website/global precedence rules. |
-| `set_contrast` | `{ "level": "high" \| "soft" }` | Foreground/background contrast becomes stronger or softer through a bounded CSS rule. | Never saves automatically. |
-| `set_color_filter` | `{ "filter": "grayscale" \| "warm" \| "cool" \| "invert" }` | Page colors change using the selected bounded filter. | Explicit preference approval required. |
+| `set_contrast` | `{ "level": "normal" \| "high" \| "soft" }` | Foreground/background contrast becomes standard, stronger, or softer through a bounded CSS rule. | Never saves automatically. |
+| `set_color_filter` | `{ "filter": "none" \| "grayscale" \| "warm" \| "cool" \| "invert" }` | Page colors change using the selected bounded filter; `none` restores normal colors. | Explicit preference approval required. |
+| `set_reading_font` | `{ "font": "default" \| "reading" }` | Text uses a more readable bounded font stack or restores the page default. | Explicit preference approval required. |
 | `reduce_motion` | `{ "enabled": boolean }` | The moving `.notice` stops animating when enabled. | Page revision is checked before apply. |
 | `enlarge_targets` | `{ "enabled": boolean }` | Buttons, links, and form controls receive larger hit areas. | Page revision is checked before apply. |
 | `focus_elements` | `{}` plus non-empty `targetElementIds` | Selected controls receive a visible focus treatment; prior focus/style is captured. | Missing IDs reject safely; no best-effort mutation. |

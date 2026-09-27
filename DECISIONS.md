@@ -8,9 +8,9 @@ The product is a true Chromium wrapper. Electron provides the reliable desktop w
 
 Jac owns profiles, preference memory, request interpretation, adaptation planning, explanations, and most first-party product logic. Electron/Node stays limited to browser-specific operations. This makes the Jac requirement meaningful instead of cosmetic.
 
-## D003 — Use an online OpenAI model
+## D003 — Use NVIDIA NIM for online planning
 
-The product intentionally uses an online OpenAI API model for page-specific adaptation planning. API credentials are supplied through environment variables and never committed. Local preference storage does not imply that page snapshots sent to the model are local.
+The product intentionally uses NVIDIA NIM's OpenAI-compatible chat-completions API for page-specific adaptation planning. API credentials are supplied through environment variables and never committed. Local preference storage does not imply that page snapshots sent to the model are local.
 
 ## D004 — Plans use an allowlist
 

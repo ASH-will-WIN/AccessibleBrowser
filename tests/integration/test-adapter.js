@@ -7,6 +7,7 @@ const ACTION_TYPES = new Set([
   "set_spacing",
   "set_contrast",
   "set_color_filter",
+  "set_reading_font",
   "reduce_motion",
   "enlarge_targets",
   "hide_regions",
@@ -224,6 +225,9 @@ function validateParameters(action) {
       break;
     case "set_color_filter":
       assert(["none", "grayscale", "protanopia", "deuteranopia", "tritanopia"].includes(parameters.filter), `${action.actionId} color filter is invalid`);
+      break;
+    case "set_reading_font":
+      assert(["default", "reading"].includes(parameters.font), `${action.actionId} reading font is invalid`);
       break;
     case "reduce_motion":
     case "enlarge_targets":

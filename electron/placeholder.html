@@ -38,6 +38,7 @@
     </form>
     <div id="tools">
       <button id="snapshot" type="button">Page snapshot</button>
+      <button id="experience" type="button">Open accessibility panel</button>
       <button id="scale" type="button" hidden>Text +25% (development fixture)</button>
       <button id="undo" type="button" disabled>Undo adaptation</button>
       <span id="message" role="status">The live webpage is isolated in its own Chromium surface.</span>
@@ -96,6 +97,12 @@
           address.value = lastSnapshot.url;
           show(`Snapshot ${lastSnapshot.snapshotId}; revision ${lastSnapshot.pageRevision}. ${lastSnapshot.contentSummary.slice(0, 190)}`);
         } catch (error) { show(`Snapshot failed: ${error.message}`); }
+      });
+      document.querySelector("#experience").addEventListener("click", async () => {
+        try {
+          unwrap(await window.browser.openAccessibilityExperience());
+          show("Accessibility panel opened. Use Jac to preview, apply, undo, and save changes.");
+        } catch (error) { show(`Accessibility panel failed: ${error.message}`); }
       });
       document.querySelector("#scale").addEventListener("click", async () => {
         try {

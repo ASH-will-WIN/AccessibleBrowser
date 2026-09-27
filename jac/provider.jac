@@ -1,6 +1,6 @@
-"""Bounded OpenAI planning adapter.
+"""Bounded NVIDIA NIM planning adapter.
 
-Only this module knows how to call the online model.  The rest of Jac receives
+Only this module knows how to call the online model. The rest of Jac receives
 typed plans and validates them before any bridge handoff.  The adapter uses the
 standard library so the repository does not acquire a provider-specific SDK.
 """
@@ -29,21 +29,34 @@ import urllib.request
 def _ab_getenv(name):
     return os.environ.get(name, "")
 
-def _ab_openai_plan(api_key, model, payload):
+def _ab_nim_plan(api_key, model, base_url, payload):
     system = (
         "You are an accessibility planning service. Return JSON only. "
-        "Return an object with summary, confidence, warnings, suggestedScope, "
-        "status, and actions. Each action must use only these type values: "
-        "set_text_scale, set_spacing, set_contrast, set_color_filter, "
+        "Return exactly one JSON object with schemaVersion, planId, requestId, "
+        "tabId, pageRevision, summary, confidence, warnings, suggestedScope, "
+        "status, and actions. Copy requestId, tabId, and pageRevision exactly "
+        "from the input. Use status ready when actions are present and noOp "
+        "only when actions is empty. Each action must include actionId, type, "
+        "parameters, reason, reversible:true, and targetElementIds. Each action "
+        "must use only these type values: "
+        "set_text_scale, set_spacing, set_contrast, set_color_filter, set_reading_font, "
         "reduce_motion, enlarge_targets, hide_regions, reading_mode, focus_elements. "
+        "Use these parameter shapes only: set_text_scale {scale}; set_spacing "
+        "{lineHeight,letterSpacing}; set_contrast {level:normal|high|soft}; "
+        "set_color_filter {filter:none|grayscale|warm|cool|invert}; "
+        "set_reading_font {font:default|reading}; reduce_motion, enlarge_targets, "
+        "and reading_mode {enabled}; focus_elements and hide_regions use bounded "
+        "targetElementIds and empty parameters. "
+        "confidence must be exactly one of high, medium, or low. "
         "Never return JavaScript, CSS, selectors, shell commands, or browser commands. "
         "Use typed parameters, a reason, reversible=True, and targetElementIds only "
         "from the supplied snapshot."
     )
     request_body = {
-        "model": model or "gpt-4o-mini",
+        "model": model or "meta/llama-3.1-8b-instruct",
         "temperature": 0,
-        "max_tokens": 1200,
+        "max_tokens": 2000,
+        "chat_template_kwargs": {"enable_thinking": False},
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system},
@@ -51,7 +64,7 @@ def _ab_openai_plan(api_key, model, payload):
         ]
     }
     request = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
+        base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(request_body).encode("utf-8"),
         headers={
             "Authorization": "Bearer " + api_key,
@@ -260,12 +273,14 @@ def model_plan_from_map(data: dict[str, any], request: AdaptationRequest) -> Pla
 }
 
 def llm_plan(request: AdaptationRequest) -> PlanResult {
-    apiKey = _ab_getenv("OPENAI_API_KEY") as str;
+    apiKey = _ab_getenv("NVIDIA_API_KEY") as str;
     if apiKey == "" {
-        return plan_error(request.requestId, "LLM_UNAVAILABLE", "OPENAI_API_KEY is not configured.", True);
+        return plan_error(request.requestId, "LLM_UNAVAILABLE", "NVIDIA_API_KEY is not configured.", True);
     }
-    model = _ab_getenv("OPENAI_MODEL") as str;
-    response: any = _ab_openai_plan(apiKey, model, bounded_payload(request));
+    model = _ab_getenv("NVIDIA_NIM_MODEL") as str;
+    baseUrl = _ab_getenv("NVIDIA_NIM_BASE_URL") as str;
+    if baseUrl == "" { baseUrl = "https://integrate.api.nvidia.com/v1"; }
+    response: any = _ab_nim_plan(apiKey, model, baseUrl, bounded_payload(request));
     responseMap = response as dict[str, any];
     if not (responseMap.get("ok", False) as bool) {
         return plan_error(request.requestId, "LLM_UNAVAILABLE", "The online planner could not be reached.", True);
@@ -296,7 +311,7 @@ def create_adaptation_plan(request: AdaptationRequest) -> PlanResult {
     if result.ok { return result; }
     fallback = deterministic_plan(request);
     if fallback.ok and fallback.plan is not None {
-        fallback.plan.warnings.append("The online planner was unavailable or returned an invalid plan; a deterministic local plan was used.");
+        fallback.plan.warnings.append("The online planner was unavailable or returned an invalid plan (" + (result.error.message if result.error else "unknown validation error") + "); a deterministic local plan was used.");
         return fallback;
     }
     return result;

@@ -14,6 +14,7 @@ const ACTION_KINDS = new Set([
   "set_spacing",
   "set_contrast",
   "set_color_filter",
+  "set_reading_font",
   "reduce_motion",
   "enlarge_targets",
   "hide_regions",
@@ -449,11 +450,15 @@ function validatePlan(plan) {
         break;
       case "set_contrast":
         requireKeys(params, ["level"]);
-        if (!["high", "soft"].includes(params.level)) throw commandError("INVALID_PARAMETERS", "Contrast level must be high or soft.");
+        if (!["normal", "high", "soft"].includes(params.level)) throw commandError("INVALID_PARAMETERS", "Contrast level must be normal, high, or soft.");
         break;
       case "set_color_filter":
         requireKeys(params, ["filter"]);
-        if (!["grayscale", "warm", "cool", "invert"].includes(params.filter)) throw commandError("INVALID_PARAMETERS", "Unsupported color filter.");
+        if (!["none", "grayscale", "warm", "cool", "invert"].includes(params.filter)) throw commandError("INVALID_PARAMETERS", "Unsupported color filter.");
+        break;
+      case "set_reading_font":
+        requireKeys(params, ["font"]);
+        if (!["default", "reading"].includes(params.font)) throw commandError("INVALID_PARAMETERS", "Unsupported reading font.");
         break;
       case "reduce_motion":
       case "enlarge_targets":
@@ -488,6 +493,14 @@ async function restoreFocus(tab, focusToken) {
 
 register("ping", () => ({ ok: true, source: "electron", contractVersion: 1 }));
 register("get-browser-state", () => ({ schemaVersion: 1, activeTabId, developmentFixtureEnabled: !app.isPackaged && process.env.ACCESSIBLE_BROWSER_DEVELOPMENT === "1", tabs: [...tabs.values()].map((tab) => ({ tabId: tab.id, url: redactUrl(tab.view.webContents.getURL()), title: tab.view.webContents.getTitle(), loading: tab.view.webContents.isLoading() })) }));
+register("open-accessibility-experience", () => {
+  if (!experienceWindow || experienceWindow.isDestroyed()) createExperienceWindow();
+  if (experienceWindow && !experienceWindow.isDestroyed()) {
+    experienceWindow.show();
+    experienceWindow.focus();
+  }
+  return { status: "completed" };
+});
 register("get-page-snapshot", getPageSnapshot);
 register("request-adaptation", async (request) => {
   requireKeys(request, ["schemaVersion", "requestId", "tabId", "pageRevision", "userRequest", "activeProfile", "page", "applicableRules", "mode"]);
@@ -518,11 +531,16 @@ register("apply-adaptation-plan", async (plan) => {
       switch (action.type) {
         case "set_text_scale": css = selector ? `${selector}{font-size:calc(1em * ${params.scale})!important}` : `html{font-size:calc(100% * ${params.scale})!important}body{font-size:1em!important}`; break;
         case "set_spacing": css = `${selector || "body"}{${params.lineHeight === undefined ? "" : `line-height:${params.lineHeight}!important;`}${params.letterSpacing === undefined ? "" : `letter-spacing:${params.letterSpacing}em!important;`}}`; break;
-        case "set_contrast": css = `html{--ab-contrast:${params.level === "high" ? 1.45 : 1.1};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
+        case "set_contrast": css = `html{--ab-contrast:${params.level === "high" ? 1.45 : (params.level === "soft" ? 1.1 : 1)};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
         case "set_color_filter": {
-          const filter = { grayscale: "grayscale(1)", warm: "sepia(.35)", cool: "hue-rotate(12deg)", invert: "invert(1) hue-rotate(180deg)" }[params.filter];
-          css = `html{--ab-color-filter:${filter};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
+          const filter = { none: "none", grayscale: "grayscale(1)", warm: "sepia(.35)", cool: "hue-rotate(12deg)", invert: "invert(1) hue-rotate(180deg)" }[params.filter];
+          css = filter === "none"
+            ? "html{--ab-color-filter:none;filter:contrast(var(--ab-contrast,1))!important}"
+            : `html{--ab-color-filter:${filter};filter:contrast(var(--ab-contrast,1)) var(--ab-color-filter,none)!important}`; break;
         }
+        case "set_reading_font": css = params.font === "reading"
+          ? "body,button,input,select,textarea{font-family:Verdana,Arial,sans-serif!important}"
+          : "body,button,input,select,textarea{font-family:revert!important}"; break;
         case "reduce_motion": css = params.enabled ? "*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}" : "*,*::before,*::after{scroll-behavior:revert!important;animation-duration:revert!important;animation-iteration-count:revert!important;transition-duration:revert!important}"; break;
         case "enlarge_targets": css = params.enabled ? "button,a[href],input,select,textarea,[role=button]{min-width:2.75rem!important;min-height:2.75rem!important;padding:.5rem!important}" : "button,a[href],input,select,textarea,[role=button]{min-width:revert!important;min-height:revert!important;padding:revert!important}"; break;
         case "hide_regions": css = `${selector}{display:none!important;visibility:hidden!important}`; break;
@@ -702,6 +720,7 @@ function createExperienceWindow() {
     minWidth: 760,
     minHeight: 600,
     title: "AccessibleBrowser accessibility experience",
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -718,11 +737,37 @@ function createExperienceWindow() {
   experienceWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   experienceWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
   experienceWindow.on("closed", () => { experienceWindow = undefined; });
-  void experienceWindow.loadURL(jacUiUrl).catch((error) => {
-    if (experienceWindow && !experienceWindow.isDestroyed()) {
-      console.error(`Unable to load Jac accessibility experience: ${error.message}`);
-    }
+  let experienceWindowRevealed = false;
+  const revealExperienceWindow = () => {
+    if (experienceWindowRevealed || !experienceWindow || experienceWindow.isDestroyed()) return;
+    experienceWindowRevealed = true;
+    experienceWindow.show();
+    experienceWindow.focus();
+  };
+  experienceWindow.once("ready-to-show", revealExperienceWindow);
+  experienceWindow.webContents.once("did-finish-load", revealExperienceWindow);
+  let retryTimer;
+  const loadExperience = () => {
+    if (!experienceWindow || experienceWindow.isDestroyed()) return;
+    void experienceWindow.loadURL(jacUiUrl).catch((error) => {
+      if (!experienceWindow || experienceWindow.isDestroyed()) return;
+      console.error(`Unable to load Jac accessibility experience; retrying: ${error.message}`);
+      retryTimer = setTimeout(loadExperience, 750);
+    });
+  };
+  experienceWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || !experienceWindow || experienceWindow.isDestroyed()) return;
+    console.error(`Unable to load Jac accessibility experience (${errorCode}): ${errorDescription} ${validatedURL}`);
+    if (!retryTimer) retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      loadExperience();
+    }, 750);
   });
+  experienceWindow.on("closed", () => {
+    if (retryTimer) clearTimeout(retryTimer);
+    experienceWindow = undefined;
+  });
+  loadExperience();
 }
 
 register("jac", async (request) => {

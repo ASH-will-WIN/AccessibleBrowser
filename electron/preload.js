@@ -33,6 +33,7 @@ const api = Object.freeze({
   undoAdaptation: (undoToken) => invoke("undo-adaptation", { undoToken }),
   executeBrowserCommand: (command) => invoke("execute-browser-command", command),
   getBrowserState: () => invoke("get-browser-state"),
+  openAccessibilityExperience: () => invoke("open-accessibility-experience"),
   onPageChanged,
   ping: () => invoke("ping"),
 });

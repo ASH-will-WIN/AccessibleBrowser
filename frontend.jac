@@ -58,6 +58,10 @@ def:pub app -> JsxElement {
         error_code: str = "",
         can_undo: bool = False,
         undo_token: str = "",
+        profile_before_apply: AccessibilityProfile = AccessibilityProfile(),
+        has_profile_before_apply: bool = False,
+        simple_mode_before_apply: bool = False,
+        focus_highlight_before_apply: bool = False,
         last_change: str = "No adaptation applied yet.",
         show_preference_prompt: bool = False,
         preference_message: str = "No approved saved rule for this page.",
@@ -71,6 +75,8 @@ def:pub app -> JsxElement {
         voice_command_shape: str = "No command sent yet.",
         development_adapter_enabled: bool = False,
         bridge_status: str = "Connecting Jac planner and Electron page host…",
+        last_planning_mode: str = "llm",
+        stale_retry_count: int = 0,
         submit_timer: float = 0.0;
 
     bridge: any = window as any;
@@ -78,8 +84,19 @@ def:pub app -> JsxElement {
     async can with entry {
         try {
             bridge.browser.onPageChanged(lambda (message: any) {
+                if message {
+                    # Keep the experience window's visible context synchronized
+                    # with the active Chromium page. The old handler updated
+                    # only the revision, so the panel could keep displaying a
+                    # previous page (for example, Google) while applying to the
+                    # current page.
+                    page_tab_id = message.tabId;
+                    if message.title { page_title = message.title; }
+                    if message.url { page_url = message.url; }
+                }
                 if message and message.pageRevision != page_revision {
                     page_revision = message.pageRevision;
+                    current_page = {};
                     can_undo = False;
                     if plan_ready {
                         plan_ready = False;
@@ -174,12 +191,17 @@ def:pub app -> JsxElement {
     }
 
     def deterministic_request(change: str) -> str {
-        if change == "larger_text" { return "Make the text larger"; }
-        if change == "spacing" { return "Add more spacing between lines"; }
-        if change == "contrast" { return "Increase contrast"; }
-        if change == "motion" { return "Reduce motion"; }
-        if change == "targets" { return "Make the buttons easier to click"; }
-        if change == "color_filter" { return "Apply a grayscale color filter"; }
+        if change == "larger_text" { return "Restore standard text size" if profile.textScale != 1.0 else "Make the text larger"; }
+        if change == "spacing" { return "Restore standard spacing" if profile.spacing == "comfortable" else "Add more spacing between lines"; }
+        if change == "contrast" { return "Restore standard contrast" if profile.contrast == "high" else "Increase contrast"; }
+        if change == "motion" { return "Restore normal motion" if profile.reduceMotion else "Reduce motion"; }
+        if change == "targets" { return "Restore standard click targets" if profile.enlargeTargets else "Make the buttons easier to click"; }
+        if change == "color_filter" {
+            return "Remove the color filter" if profile.colorFilter != "none" else "Apply a grayscale color filter";
+        }
+        if change == "reading_font" {
+            return "Restore the default font" if profile.readingFont != "default" else "Use a more readable font";
+        }
         if change == "focus" { return "Highlight elements for keyboard focus"; }
         return "Use a more readable font";
     }
@@ -193,12 +215,14 @@ def:pub app -> JsxElement {
         request_state_detail = "Jac is preparing a deterministic preview. Nothing has changed on the page yet.";
         plan_ready = False;
         show_preference_prompt = False;
+        stale_retry_count = 0;
         if submit_timer { clearTimeout(submit_timer); }
         submit_timer = setTimeout(lambda { request_plan(request_text, "deterministic"); }, 100);
     }
 
     async def request_plan(request_value: str, planning_mode: str) {
         try {
+            last_planning_mode = planning_mode;
             snapshot: any = await bridge.browser.getActivePageSnapshot();
             if not snapshot or snapshot.status == "rejected" {
                 request_state = "failed";
@@ -217,6 +241,10 @@ def:pub app -> JsxElement {
                 "userRequest": request_value,
                 "tabId": snapshot.tabId,
                 "pageRevision": snapshot.pageRevision,
+                # Send the profile that is currently active on the page. The
+                # pending profile is the desired post-apply UI state; sending
+                # it here makes Jac think the requested change is already
+                # active and incorrectly produces NO_OP.
                 "profile": profile,
                 "page": snapshot,
                 "mode": planning_mode
@@ -232,11 +260,13 @@ def:pub app -> JsxElement {
                 return;
             }
             wire_plan = plan_result.plan;
+            plan_summary = wire_plan.summary if wire_plan.summary else "Jac did not identify a supported accessibility change.";
+            plan_warning = "; ".join(wire_plan.warnings) if len(wire_plan.warnings) > 0 else "Try a specific request such as larger text, more spacing, higher contrast, reduced motion, larger click targets, a color filter, reading font, or reading mode.";
             if wire_plan.status != "ready" or len(wire_plan.actions) == 0 {
                 error_code = "NO_OP";
-                rejection_message = "Jac found no safe, allowlisted change for this request.";
+                rejection_message = plan_summary;
                 request_state = "rejected";
-                request_state_detail = "Nothing changed on the page. Try describing a supported accessibility need.";
+                request_state_detail = plan_summary + " " + plan_warning;
                 return;
             }
             clean_actions: list[dict[str, any]] = [{
@@ -291,6 +321,7 @@ def:pub app -> JsxElement {
         show_preference_prompt = False;
         if submit_timer { clearTimeout(submit_timer); }
         has_pending_profile = False;
+        stale_retry_count = 0;
         submit_timer = setTimeout(lambda { request_plan(request_text, "llm"); }, 100);
     }
 
@@ -323,8 +354,16 @@ def:pub app -> JsxElement {
             show_preference_prompt = True;
             plan_ready = False;
             error_code = "";
-            if "simple mode" in request_text.lower() { simple_mode = True; }
-            if has_pending_profile { profile = pending_profile; has_pending_profile = False; }
+            simple_mode_before_apply = simple_mode;
+            focus_highlight_before_apply = focus_highlight;
+            if "simplify this page" in request_text.lower() or "simple mode" in request_text.lower() { simple_mode = True; }
+            if "focus" in request_text.lower() or "highlight" in request_text.lower() { focus_highlight = True; }
+            if has_pending_profile {
+                profile_before_apply = profile;
+                has_profile_before_apply = True;
+                profile = pending_profile;
+                has_pending_profile = False;
+            }
             try {
                 await bridge.accessibleBrowser.jac.recordApplyResult({
                     "requestId": reviewed_wire_plan["requestId"],
@@ -342,9 +381,18 @@ def:pub app -> JsxElement {
                 preference_message = persistence_message;
             }
         } elif result["error"] and result["error"]["code"] == "STALE_PAGE_REVISION" {
-            request_state = "stale";
-            error_code = result["error"]["code"];
-            request_state_detail = "The page changed before applying. Refresh the page and retry the request.";
+            if stale_retry_count < 1 {
+                stale_retry_count += 1;
+                plan_ready = False;
+                error_code = "";
+                request_state = "understanding";
+                request_state_detail = "The page changed while the planner was working. Refreshing the snapshot and preparing a new preview...";
+                await request_plan(request_text, last_planning_mode);
+            } else {
+                request_state = "stale";
+                error_code = result["error"]["code"];
+                request_state_detail = "The page changed again before applying. Review the current page and retry.";
+            }
         } elif result["status"] == "rejected" {
             request_state = "rejected";
             error_code = result["error"]["code"] if result["error"] else "INVALID_PLAN";
@@ -374,6 +422,12 @@ def:pub app -> JsxElement {
             request_state_detail = "The last adaptation was undone.";
             last_change = result["result"];
             show_preference_prompt = False;
+            if has_profile_before_apply {
+                profile = profile_before_apply;
+                has_profile_before_apply = False;
+            }
+            simple_mode = simple_mode_before_apply;
+            focus_highlight = focus_highlight_before_apply;
         } elif result["error"] and result["error"]["code"] == "UNDO_FAILED" {
             can_undo = False;
             request_state = "stale";
@@ -431,6 +485,7 @@ def:pub app -> JsxElement {
         request_state_detail = "Jac is preparing a Simple Mode preview. Nothing has changed on the page yet.";
         plan_ready = False;
         show_preference_prompt = False;
+        stale_retry_count = 0;
         await request_plan(request_text, "deterministic");
     }
 

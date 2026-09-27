@@ -17,7 +17,7 @@ The Electron shell window provides navigation and browser controls. A separate t
     Jac builds an adaptation request
               |
               v
-    Online OpenAI model chooses an allowlisted plan
+              Online NVIDIA NIM model chooses an allowlisted plan
               |
               v
     Jac validates and explains the plan
@@ -39,7 +39,7 @@ The Electron shell window provides navigation and browser controls. A separate t
 - Adaptation request interpretation
 - Page understanding and plan generation
 - Plan validation and human-readable explanations
-- OpenAI API integration behind a small provider boundary
+- NVIDIA NIM API integration behind a small provider boundary
 - Future Jac UI and voice interaction logic where practical
 
 ## Electron/Node owns

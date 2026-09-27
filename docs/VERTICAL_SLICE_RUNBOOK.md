@@ -17,7 +17,7 @@ The demo server is optional when using `https://example.com`; it provides a repe
 
 ```sh
 npm run jac:check
-env -u OPENAI_API_KEY -u OPENAI_MODEL node scripts/jac.js test jac/core_test.jac -v
+env -u NVIDIA_API_KEY -u NVIDIA_NIM_MODEL node scripts/jac.js test jac/core_test.jac -v
 node tests/integration/run-contract-tests.js
 node --check electron/main.js
 node --check electron/preload.js
@@ -29,7 +29,7 @@ In the running browser, verify: snapshot with a stable revision; deterministic r
 
 ## Configuration and safety
 
-`OPENAI_API_KEY` and optional `OPENAI_MODEL` are read by Jac only. Never commit `.env` or any populated secret. `ACCESSIBLE_BROWSER_JAC_URL` and `ACCESSIBLE_BROWSER_JAC_API_URL` override the local Jac UI/API endpoints. Keep browser actions allowlisted and reversible; do not add arbitrary page scripts or shell commands.
+`NVIDIA_API_KEY`, optional `NVIDIA_NIM_MODEL`, and optional `NVIDIA_NIM_BASE_URL` are read by Jac only. Never commit `.env` or any populated secret. `ACCESSIBLE_BROWSER_JAC_URL` and `ACCESSIBLE_BROWSER_JAC_API_URL` override the local Jac UI/API endpoints. Keep browser actions allowlisted and reversible; do not add arbitrary page scripts or shell commands.
 
 ## Integration procedure
 

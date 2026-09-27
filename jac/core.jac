@@ -215,6 +215,7 @@ def is_allowlisted_action(actionType: str) -> bool {
         "set_spacing",
         "set_contrast",
         "set_color_filter",
+        "set_reading_font",
         "reduce_motion",
         "enlarge_targets",
         "hide_regions",
@@ -408,22 +409,33 @@ def deterministic_plan(request: AdaptationRequest) -> PlanResult {
     profile = effective_profile(request);
     warnings: list[str] = [];
 
-    if contains_any(lowered, ["text larger", "larger text", "make the text larger", "increase text", "bigger text"]) {
-        if profile.textScale < 1.2 {
-            actions.append(new_action(actionNumber, "set_text_scale", {"scale": 1.25}, "Increase text size for easier reading."));
+    if contains_any(lowered, ["text larger", "larger text", "make the text larger", "increase text", "bigger text", "restore standard text size", "normal text size"]) {
+        targetScale = 1.25;
+        if contains_any(lowered, ["restore standard text size", "normal text size", "reset text size"]) { targetScale = 1.0; }
+        if profile.textScale != targetScale {
+            actions.append(new_action(actionNumber, "set_text_scale", {"scale": targetScale}, "Set text size for easier reading."));
             actionNumber += 1;
         }
     }
-    if contains_any(lowered, ["spacing", "more space", "line spacing", "spread out"]) and profile.spacing != "comfortable" {
+    if contains_any(lowered, ["spacing", "more space", "line spacing", "spread out", "restore standard spacing"]) {
+        if contains_any(lowered, ["restore standard spacing", "normal spacing", "reset spacing"]) {
+            if profile.spacing == "comfortable" { actions.append(new_action(actionNumber, "set_spacing", {"lineHeight": 1.0, "letterSpacing": 0.0}, "Restore standard spacing.")); actionNumber += 1; }
+        } elif profile.spacing != "comfortable" {
             actions.append(new_action(actionNumber, "set_spacing", {"lineHeight": 1.7, "letterSpacing": 0.02}, "Increase spacing between readable blocks."));
-        actionNumber += 1;
+            actionNumber += 1;
+        }
     }
-    if contains_any(lowered, ["high contrast", "higher contrast", "contrast"]) and profile.contrast != "high" {
-            actions.append(new_action(actionNumber, "set_contrast", {"level": "high"}, "Increase contrast between foreground and background."));
-        actionNumber += 1;
+    if contains_any(lowered, ["high contrast", "higher contrast", "contrast", "restore standard contrast"]) {
+        targetContrast = "high";
+        if contains_any(lowered, ["restore standard contrast", "normal contrast", "reset contrast"]) { targetContrast = "normal"; }
+        if profile.contrast != targetContrast {
+            actions.append(new_action(actionNumber, "set_contrast", {"level": targetContrast}, "Set foreground and background contrast."));
+            actionNumber += 1;
+        }
     }
     if contains_any(lowered, ["color filter", "colour filter", "grayscale", "protanopia", "deuteranopia", "tritanopia"]) {
         filterName = "grayscale";
+        if contains_any(lowered, ["remove color filter", "remove colour filter", "disable color filter", "disable colour filter", "no color filter", "no colour filter"]) { filterName = "none"; }
         if "warm" in lowered { filterName = "warm"; }
         if "cool" in lowered { filterName = "cool"; }
         if "invert" in lowered { filterName = "invert"; }
@@ -432,13 +444,29 @@ def deterministic_plan(request: AdaptationRequest) -> PlanResult {
             actionNumber += 1;
         }
     }
-    if contains_any(lowered, ["reduced motion", "reduce motion", "less animation", "stop animations"]) and not profile.reduceMotion {
-        actions.append(new_action(actionNumber, "reduce_motion", {"enabled": True}, "Reduce animation and motion effects."));
-        actionNumber += 1;
+    if contains_any(lowered, ["reading font", "readable font", "more readable font", "restore the default font", "default font"]) {
+        fontName = "reading";
+        if contains_any(lowered, ["restore", "default", "normal font"]) { fontName = "default"; }
+        if profile.readingFont != fontName {
+            actions.append(new_action(actionNumber, "set_reading_font", {"font": fontName}, "Use a more readable font choice."));
+            actionNumber += 1;
+        }
     }
-    if contains_any(lowered, ["buttons easier to click", "larger buttons", "larger click", "click targets", "easier to click"]) and not profile.enlargeTargets {
-            actions.append(new_action(actionNumber, "enlarge_targets", {"enabled": True}, "Increase the size and spacing of interactive targets."));
-        actionNumber += 1;
+    if contains_any(lowered, ["reduced motion", "reduce motion", "less animation", "stop animations", "restore normal motion"]) {
+        enabled = True;
+        if contains_any(lowered, ["restore normal motion", "normal motion", "reset motion"]) { enabled = False; }
+        if profile.reduceMotion != enabled {
+            actions.append(new_action(actionNumber, "reduce_motion", {"enabled": enabled}, "Set animation and motion effects."));
+            actionNumber += 1;
+        }
+    }
+    if contains_any(lowered, ["buttons easier to click", "larger buttons", "larger click", "click targets", "easier to click", "restore standard click targets"]) {
+        enabled = True;
+        if contains_any(lowered, ["restore standard click targets", "standard click targets", "reset click targets"]) { enabled = False; }
+        if profile.enlargeTargets != enabled {
+            actions.append(new_action(actionNumber, "enlarge_targets", {"enabled": enabled}, "Set the size and spacing of interactive targets."));
+            actionNumber += 1;
+        }
     }
     if contains_any(lowered, ["reading mode", "simplify the page", "easier to read"]) {
         actions.append(new_action(actionNumber, "reading_mode", {"enabled": True}, "Present the page in a focused reading layout."));
@@ -498,12 +526,17 @@ def validate_parameters(action: PlanAction) -> str {
     if action.type == "set_contrast" {
         if not keys_are_allowed(action.parameters, ["level"]) { return "set_contrast only accepts level"; }
         level = action.parameters.get("level");
-        if not isinstance(level, str) or level not in ["high", "soft"] { return "level must be high or soft"; }
+        if not isinstance(level, str) or level not in ["normal", "high", "soft"] { return "level must be normal, high, or soft"; }
     }
     if action.type == "set_color_filter" {
         if not keys_are_allowed(action.parameters, ["filter"]) { return "set_color_filter only accepts filter"; }
         filterName = action.parameters.get("filter");
-        if not isinstance(filterName, str) or filterName not in ["grayscale", "warm", "cool", "invert"] { return "filter is not supported"; }
+        if not isinstance(filterName, str) or filterName not in ["none", "grayscale", "warm", "cool", "invert"] { return "filter is not supported"; }
+    }
+    if action.type == "set_reading_font" {
+        if not keys_are_allowed(action.parameters, ["font"]) { return "set_reading_font only accepts font"; }
+        fontName = action.parameters.get("font");
+        if not isinstance(fontName, str) or fontName not in ["default", "reading"] { return "font is not supported"; }
     }
     if action.type == "reduce_motion" or action.type == "enlarge_targets" or action.type == "reading_mode" {
         if not keys_are_allowed(action.parameters, ["enabled"]) { return "this action only accepts enabled"; }

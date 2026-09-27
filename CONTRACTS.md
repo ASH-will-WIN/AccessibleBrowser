@@ -77,13 +77,14 @@ Initial allowlisted action kinds:
 - set_spacing
 - set_contrast
 - set_color_filter
+- set_reading_font
 - reduce_motion
 - enlarge_targets
 - hide_regions
 - reading_mode
 - focus_elements
 
-Each action has an actionId, a canonical `type` field, typed parameters, optional `targetElementIds`, a human-readable reason, and a reversible flag. The initial parameter shapes are: `set_text_scale` `{ scale: 1..2.5 }`; `set_spacing` `{ lineHeight?: 1..2.5, letterSpacing?: 0..0.2 }`; `set_contrast` `{ level: high | soft }`; `set_color_filter` `{ filter: grayscale | warm | cool | invert }`; `reduce_motion`, `enlarge_targets`, and `reading_mode` `{ enabled: boolean }`; and `hide_regions`/`focus_elements` with non-empty `targetElementIds` and no arbitrary parameters. No action may contain arbitrary JavaScript, arbitrary CSS, raw selectors, shell commands, or unbounded browser control. UI or fixture models must convert to this wire shape; `kind` is not a second action vocabulary.
+Each action has an actionId, a canonical `type` field, typed parameters, optional `targetElementIds`, a human-readable reason, and a reversible flag. The initial parameter shapes are: `set_text_scale` `{ scale: 1..2.5 }`; `set_spacing` `{ lineHeight?: 1..2.5, letterSpacing?: 0..0.2 }`; `set_contrast` `{ level: normal | high | soft }`; `set_color_filter` `{ filter: none | grayscale | warm | cool | invert }`; `set_reading_font` `{ font: default | reading }`; `reduce_motion`, `enlarge_targets`, and `reading_mode` `{ enabled: boolean }`; and `hide_regions`/`focus_elements` with non-empty `targetElementIds` and no arbitrary parameters. `normal` and `none` restore the page's standard contrast and colors. No action may contain arbitrary JavaScript, arbitrary CSS, raw selectors, shell commands, or unbounded browser control. UI or fixture models must convert to this wire shape; `kind` is not a second action vocabulary.
 
 ## Browser command
 

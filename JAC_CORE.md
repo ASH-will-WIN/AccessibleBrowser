@@ -24,8 +24,8 @@ JavaScript, CSS, selectors, shell commands, or unrestricted browser commands.
 
 ## Planning and provider boundary
 
-`jac/provider.jac` is the only module that calls OpenAI. It reads
-`OPENAI_API_KEY` and optional `OPENAI_MODEL`, caps the snapshot and response,
+`jac/provider.jac` is the only module that calls NVIDIA NIM. It reads
+`NVIDIA_API_KEY`, optional `NVIDIA_NIM_MODEL`, and optional `NVIDIA_NIM_BASE_URL`, caps the snapshot and response,
 redacts textbox/password text, and requests JSON-only structured output. Model
 results pass through the same Jac validator as deterministic results. Missing
 configuration, network errors, malformed JSON, and invalid actions return a
@@ -45,7 +45,7 @@ stores page snapshots or raw form values.
 ## Public bridge surface
 
 The Electron main process calls only the allowlisted Jac functions below and
-never receives or forwards `OPENAI_API_KEY`:
+never receives or forwards `NVIDIA_API_KEY`:
 
 ```text
 get_active_profile
@@ -71,7 +71,7 @@ tab or page-snapshot subsystem.
 
 ```text
 npm run jac:check
-env -u OPENAI_API_KEY -u OPENAI_MODEL jac test jac/core_test.jac -v
+env -u NVIDIA_API_KEY -u NVIDIA_NIM_MODEL node scripts/jac.js test jac/core_test.jac -v
 ```
 
 The fixtures in `jac/fixtures.jac` use the production contract shapes and cover
