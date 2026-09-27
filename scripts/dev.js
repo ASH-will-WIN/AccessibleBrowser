@@ -63,6 +63,7 @@ async function main() {
   const electronBinary = require("electron");
   electronProcess = spawn(electronBinary, [repositoryRoot], {
     cwd: repositoryRoot,
+    env: { ...process.env, ACCESSIBLE_BROWSER_DEVELOPMENT: "1" },
     stdio: "inherit",
   });
 
